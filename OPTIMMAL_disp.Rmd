@@ -1,0 +1,254 @@
+---
+title: "OPTIMMAL traj"
+author: "Ignacio Borquez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Directory
+```{r}
+options(max.print=10000)
+#setwd("C:/Users/ib2473/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+setwd("C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+```
+
+# Packages
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+```
+
+# Methadone dispense data
+```{r}
+#df_disp <- read_excel("//Research-CIFS.nyumc.org/Research/krawcn01lab/krawcn01labspace/OPTIMMAL/Data/optimmal_disp_r20230321.xlsx")
+df_disp <- read_excel("optimmal_disp_r20230321.xlsx")
+```
+
+## Create id for patient and population
+```{r}
+df_disp$ptid_p <- df_disp$ptid*10+df_disp$Pop
+
+# Check duplicated cases by id and dispensing date
+duplicated_dates <- duplicated(df_disp[, c("ptid_p", "xdispdate")]) # identify duplicated rows
+duplicated_patients <- unique(df_disp$ptid[duplicated_dates]) # extract unique patids with duplicate encounter dates
+table(duplicated_dates)
+duplicated_patients # No duplicated dates
+```
+
+## Total duration in study by participant
+```{r}
+# Into date
+df_disp$xdispdate <- as.Date(df_disp$xdispdate)
+
+# Initial date
+df_disp <- df_disp %>% 
+  group_by(ptid_p) %>%
+  mutate(min_date = min(xdispdate)
+  )
+
+# Last observed date
+df_disp <- df_disp %>% 
+  group_by(ptid_p) %>%
+  mutate(max_date = max(xdispdate)
+  )
+
+# Total observed time
+df_disp$tot_time <- df_disp$max_date - df_disp$min_date
+df_disp$tot_time_months <- df_disp$tot_time/30
+#df_disp_summary$obs_period <- df_disp_summary$max_date - df_disp_summary$min_date
+
+# Difference between date and initial date
+df_disp$time_dif <- df_disp$xdispdate - df_disp$min_date
+```
+
+## Type of encounter
+```{r}
+# Define daily take home
+# Addrecord
+df_disp$addrecord2 <- df_disp$addrecord
+df_disp$addrecord2[is.na(df_disp$addrecord2)] <- 0
+
+# Takehome
+df_disp$takehome2 <- df_disp$takehome
+df_disp$takehome2[is.na(df_disp$takehome2)] <- 0
+
+# Clinic
+df_disp$clinics2 <- df_disp$clinics
+df_disp$clinics2[is.na(df_disp$clinics2)] <- 0
+
+# Defining the type of encounter
+df_disp$type <- df_disp$clinics2*100+df_disp$takehome2*10+df_disp$addrecord2
+table(df_disp$type, useNA = "ifany")
+
+# 10 - Take-homes with no addrecord (359 encounters)
+# 11 - Take-homes with addrecord
+# 100 - In-clinic
+# 101 - In-clinic Holiday/Weekend (with addrecord)
+
+df_disp <- df_disp %>%
+  mutate_at(vars("type"),
+            function(x) car::recode(x, "100=1;101=2;10=3;11=3;NA=NA"))
+
+#table(df_disp$tot_time) 207 days max observed time
+
+for (tp in 0:208) {
+  # Create a column with the date for the current timepoint
+  df_disp <- df_disp %>% 
+    mutate(date = min_date + days(tp))
+  
+  # Apply the mutation and grouping operations for the current timepoint
+  df_disp <- df_disp %>% 
+    mutate(tk_d1 = case_when(
+      time_dif == tp & type == 1 ~ 1,   # In clinic
+      time_dif == tp & type == 2 ~ 2,   # Holiday/Weekend 
+      time_dif == tp & type == 3 ~ 3,   # Take-home
+      TRUE ~ 0                          # Days without an encounter 
+    )) %>%
+    group_by(ptid_p) %>%
+    mutate(!!paste0("tk_day", tp+1) := max(tk_d1))
+  
+  # Remove the temporary tk_d1 column
+  df_disp$tk_d1 <- NULL
+}
+
+#table(df_disp$tk_day209) # no one has a dose
+df_disp  <- df_disp[,-c(231)]
+
+df_disp <- df_disp %>%
+  mutate_at(vars(c(23:230)),
+            function(x) car::recode(x, "0=4")) #  Recoding days without an encounter to 4 for sequence analysis
+```
+
+## Dosage
+```{r}
+df_disp$dosage <- df_disp$dose
+
+df_disp <- df_disp %>%
+  mutate_at(vars("dosage"),
+            function(x) car::recode(x, "0:29=1;
+                                        30:59=2;
+                                        60:90=3;
+                                        91:120=4;
+                                        121:733=5;
+                                        NA=NA"))
+
+table(df_disp$dosage, useNA = "ifany") # 9312 doses below 30 (3.82%)
+table(df_disp$dose) # 20 is the first dosage with a lot of encounter (1524)
+                    # 536 encounters with more than 295
+
+for (tp in 0:208) {
+  # Create a column with the date for the current timepoint
+  df_disp <- df_disp %>% 
+    mutate(date = min_date + days(tp))
+  
+  # Apply the mutation and grouping operations for the current timepoint
+  df_disp <- df_disp %>% 
+    mutate(tk_dos1 = case_when(
+      time_dif == tp & type == 1 ~ dosage,   # In clinic
+      time_dif == tp & type == 2 ~ dosage,   # In clinic takehome
+      time_dif == tp & type == 3 ~ dosage,   # Takehome
+      TRUE ~ 0
+    )) %>%
+    group_by(ptid_p) %>%
+    mutate(!!paste0("tk_dose", tp+1) := max(tk_dos1))
+  
+  # Remove the temporary tk_d1 column
+  df_disp$tk_dos1 <- NULL
+}
+
+#table(df_disp$tk_dose209) # no one has a dose
+df_disp  <- df_disp[,-c(440)]
+
+df_disp <- df_disp %>%
+  mutate_at(vars(c(232:439)),
+            function(x) car::recode(x, "0=6")) #  Recoding days without an encounter to 21 for sequence analysis
+```
+
+## Administrative censorship
+```{r}
+for(i in 1:208){
+  col_name <- paste0("tk_day", i)
+  df_disp[[col_name]][df_disp$tot_time < i-1] <- 5
+}
+
+for(i in 1:208){
+  col_name <- paste0("tk_dose", i)
+  df_disp[[col_name]][df_disp$tot_time < i-1] <- 7
+}
+```
+
+## Total number of types of encounters
+```{r}
+# group data by patid and type, and summarise to get count of encounters for each patid and type
+encounters_by_type <- df_disp %>%
+  group_by(ptid_p, type) %>%
+  summarise(n_encounters = n()) %>%
+  ungroup()
+
+# reshape the data to wide format
+encounters_wide <- encounters_by_type %>%
+  pivot_wider(names_from = type, values_from = n_encounters, names_prefix = "count_type")
+```
+
+## Drop duplicates and test
+```{r}
+unique_data <- distinct(df_disp, ptid_p, .keep_all = TRUE)
+
+# full observation period, has two days without dose, thus 182 observed days of follow-up and 179 encounters with the clinic
+test_1 <- unique_data[unique_data$ptid_p == 92608371, ]
+head(test_1)
+
+# lost to follow-up after 9 days
+test_2 <- unique_data[unique_data$ptid_p == 11613291, ]
+head(test_2)
+
+# With days without dose 5, 6 and 7 (17-04-2020 to 20-04-2020)
+test_3 <- unique_data[unique_data$ptid_p == 3716503, ]
+head(test_3)
+```
+
+### Merge
+```{r}
+unique_data <- merge(unique_data,encounters_wide,by="ptid_p") # data merge
+```
+
+## Days without dose
+```{r}
+unique_data$count_type4 <- rowSums(unique_data[, paste0("tk_day", 1:208)] == 4)
+unique_data <- unique_data %>%
+  mutate_at(vars("count_type4"),
+            function(x) car::recode(x, "0=NA"))
+```
+
+## Total number of dispensings
+```{r}
+unique_data$count_total <- rowSums(unique_data[, c("count_type1", "count_type2", "count_type3", "count_type4")], na.rm = TRUE)
+```
+
+## Drop variables
+```{r}
+#names(unique_data)
+unique_data <- unique_data[,-c(3:10,17:22,231)]
+```
+
+## Percent of type of encounter
+```{r}
+unique_data$prct_type1 <- unique_data$count_type1/unique_data$count_total
+unique_data$prct_type1[is.na(unique_data$prct_type1)] <- 0
+
+unique_data$prct_type2 <- unique_data$count_type2/unique_data$count_total
+unique_data$prct_type2[is.na(unique_data$prct_type2)] <- 0
+
+unique_data$prct_type3 <- unique_data$count_type3/unique_data$count_total
+unique_data$prct_type3[is.na(unique_data$prct_type3)] <- 0
+
+unique_data$prct_type4 <- unique_data$count_type4/unique_data$count_total
+unique_data$prct_type4[is.na(unique_data$prct_type4)] <- 0
+```
+
+# Save dataset
+```{r}
+save(unique_data, file = "disp_data.Rda")
+```

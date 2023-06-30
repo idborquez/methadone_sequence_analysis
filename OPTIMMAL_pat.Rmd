@@ -1,0 +1,1429 @@
+---
+title: "OPTIMMAL_pat"
+author: "Ignacio Borquez Infante"
+date: "2023-05-25"
+output: html_document
+---
+
+# Directory
+```{r}
+options(max.print=10000)
+setwd("C:/Users/ib2473/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+#setwd("C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+```
+
+# Packages
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+```
+
+# Load data
+```{r warning=FALSE}
+#df_pat <- read_excel("//Research-CIFS.nyumc.org/Research/krawcn01lab/krawcn01labspace/OPTIMMAL/Data/optimmal_data_20230320r.xlsx",
+#                     sheet = "Pts",
+#                     col_names = TRUE,
+#                     na = "***")
+
+df_pat <- read_excel("optimmal_data_20230320r.xlsx",
+                     sheet = "Pts",
+                     col_names = TRUE,
+                     na = "***")
+
+df_pat <- df_pat[, -c(3,4)] 
+```
+
+## Review if there are duplicate cases
+```{r}
+dup_rows <- df_pat[duplicated(df_pat$ptid) | duplicated(df_pat$ptid, fromLast = TRUE), ]
+
+counts <- table(df_pat$ptid)
+dup <- names(counts[counts > 1])
+dup ## 78 duplicated cases, all duplicated are same site, different Pop
+```
+
+## Create id for patient and population
+```{r}
+df_pat$ptid_p <- df_pat$ptid*10+df_pat$Pop
+
+# Check duplicated cases by id and dispensing date
+duplicated <- duplicated(df_pat[, c("ptid_p")]) # identify duplicated rows
+duplicated_patients <- unique(df_pat$ptid[duplicated]) # extract unique patids with duplicate encounter dates
+table(duplicated)
+duplicated_patients # No duplicated dates
+```
+
+## Review variables
+```{r}
+### Age
+# table(df_pat$DOB, useNA = "ifany") # No missing
+# summary(df_pat$DOB)
+
+# table(df_pat$IntakeDate, useNA = "ifany") # No missing
+# summary(df_pat$IntakeDate)
+
+df_pat$DOB <- as.Date(df_pat$DOB)                    # Date of birth to date format
+df_pat$IntakeDate <- as.Date(df_pat$IntakeDate)      # Date intake to date format
+
+df_pat$age <- df_pat$IntakeDate - df_pat$DOB         # Difference between date of intake and date of birth
+df_pat$age <- df_pat$age/365                         # Age
+
+# table(df_pat$age, useNA = "ifany") # No missing
+df_pat$age <- as.numeric(df_pat$age)
+df_pat <- df_pat %>% mutate_at(vars(("age")), list(~ round(., 0))) # Rounding age
+
+### Age groups
+df_pat$age_groups <- df_pat$age                       
+
+df_pat <- df_pat %>%
+  mutate_at(vars("age_groups"),
+            function(x) car::recode(x, "18:29=1;30:39=2;40:49=3;50:77=4;NA=NA"))
+
+df_pat[c("age_groups")] <- lapply(df_pat[c("age_groups")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4"), 
+                                 labels = c("18 to 29", 
+                                            "30 to 39",
+                                            "40 to 49",
+                                            "50 or more"))
+
+table(df_pat$age_groups, useNA = "ifany") # No missing
+
+### Gender
+table(df_pat$Gender, useNA = "ifany")
+
+# 98 - 2 cases: treated as female
+# 4284698 - unisex
+# 7148613 - Transgender - presents as Female
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Gender"),
+            function(x) car::recode(x, "98=2;NA=NA"))
+
+df_pat[c("Gender")] <- lapply(df_pat[c("Gender")], factor,
+                                 levels=c("1", 
+                                          "2"), 
+                                 labels = c("Male", 
+                                            "Female"))
+
+### Race
+table(df_pat$Race, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Race"),
+            function(x) car::recode(x, "-99=9;NA=NA"))
+
+# 1	White
+# 2	African-American/Black
+# 3	Asian
+# 4	Native Hawaiian or Other Pacific Islander
+# 5	American Indian or Alaskan Native
+# 98	Other
+# 99 NR
+
+subset_df <- subset(df_pat, Race == 98) # 133 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, RaceSpecify = subset_df$RaceSpecify)
+patient_table
+
+df_pat$Race[df_pat$ptid_p == 231373] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 7493263] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 8022985] <- 6 # Cuban
+df_pat$Race[df_pat$ptid_p == 15794772] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 17185705] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 17805892] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 17805893] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 20471013] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 28813993] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 31346754] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 33770183] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 34054431] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 34143033] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 34157004] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 35444742] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 41196571] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 42840225] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 43631514] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 43863365] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 43941311] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 45068681] <- 6 # Hispanic/Latino
+df_pat$Race[df_pat$ptid_p == 49327714] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 52986553] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 53272843] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 53970115] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 54883561] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 55297342] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 56992761] <- 6 # Hispanic/Latino
+df_pat$Race[df_pat$ptid_p == 57543122] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 58396455] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 59832851] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 61839945] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 61878413] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 67460561] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 71465183] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 75883323] <- 6 # Hispanic/Latino
+df_pat$Race[df_pat$ptid_p == 75978031] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 77306975] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 81419642] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 83373062] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 83712565] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 83781152] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 84133475] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 84495945] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 84958084] <- 6 # Hispanic/Latino
+df_pat$Race[df_pat$ptid_p == 85402912] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 86504804] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 87024571] <- 6 # Hispanic/Latino
+df_pat$Race[df_pat$ptid_p == 88010561] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 91488744] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 96039273] <- 6 # Hispanic
+df_pat$Race[df_pat$ptid_p == 99413742] <- 6 # Puerto Rican
+df_pat$Race[df_pat$ptid_p == 2947621] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 3576442] <- 7 # White and American Indian
+df_pat$Race[df_pat$ptid_p == 6042024] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 7366681] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 11555274] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 12275145] <- 7 # biracial
+df_pat$Race[df_pat$ptid_p == 12762232] <- 7 # bi-racial white and African American
+df_pat$Race[df_pat$ptid_p == 12762233] <- 7 # bi-racial white and African American
+df_pat$Race[df_pat$ptid_p == 14462343] <- 7 # Arabic
+df_pat$Race[df_pat$ptid_p == 16334291] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 16706021] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 17300535] <- 7 # Native American/African American
+df_pat$Race[df_pat$ptid_p == 17865305] <- 7 # "Unknown AND White"
+df_pat$Race[df_pat$ptid_p == 20015721] <- 7 # Biracial
+df_pat$Race[df_pat$ptid_p == 21237351] <- 7 # Egyptian & Greek
+df_pat$Race[df_pat$ptid_p == 23602285] <- 7 # "Pacific Islander AND Unknown"
+df_pat$Race[df_pat$ptid_p == 26103942] <- 7 # Bi-racial: Black/Native American
+df_pat$Race[df_pat$ptid_p == 26396444] <- 7 # Biracial
+df_pat$Race[df_pat$ptid_p == 26455304] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 26460551] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 27856281] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 29217702] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 30891081] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 31213331] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 31358204] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 31411791] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 34431931] <- 7 # Bi-racial: White and Native American
+df_pat$Race[df_pat$ptid_p == 37409991] <- 7 # Multi-Racial
+df_pat$Race[df_pat$ptid_p == 39476213] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 40049464] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 40333401] <- 7 # Native American/White
+df_pat$Race[df_pat$ptid_p == 43553792] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 46623812] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 46753003] <- 7 # Not Specified
+df_pat$Race[df_pat$ptid_p == 47398201] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 49167362] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 49167363] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 50048441] <- 7 # biracial
+df_pat$Race[df_pat$ptid_p == 52054374] <- 7 # Both White & Am Indian/Alaskan Native
+df_pat$Race[df_pat$ptid_p == 52431364] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 52579595] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 54622473] <- 7 # bi-racial white and African American
+df_pat$Race[df_pat$ptid_p == 58845474] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 60505564] <- 7 # "More than one race"
+df_pat$Race[df_pat$ptid_p == 61286943] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 63347154] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 63686052] <- 7 # Albanian
+df_pat$Race[df_pat$ptid_p == 64032861] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 66320501] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 66544274] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 68330882] <- 7 # Biracial
+df_pat$Race[df_pat$ptid_p == 68330883] <- 7 # Biracial
+df_pat$Race[df_pat$ptid_p == 69899401] <- 7 # Multi-Racial
+df_pat$Race[df_pat$ptid_p == 70448942] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 71025723] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 75294633] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 76516755] <- 7 # Not specified
+df_pat$Race[df_pat$ptid_p == 76693693] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 78336492] <- 7 # Bi racial- white and native American
+df_pat$Race[df_pat$ptid_p == 78913902] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 78990762] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 79718374] <- 7 # Bi-racial: Black, Native American/Alaskan Native
+df_pat$Race[df_pat$ptid_p == 80061425] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 80834841] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 82273281] <- 7 # biracial
+df_pat$Race[df_pat$ptid_p == 82411975] <- 7 # Middle Eastern
+df_pat$Race[df_pat$ptid_p == 83069212] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 83069213] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 85038602] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 86572443] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 89077771] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 90105143] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 93186863] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 93499612] <- 7 # Mixed race- Native American and Black
+df_pat$Race[df_pat$ptid_p == 96198943] <- 7 # Multi-racial
+df_pat$Race[df_pat$ptid_p == 98004412] <- 7 # bi-racial white and American Indian
+df_pat$Race[df_pat$ptid_p == 98514871] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 98845972] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 98845973] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 99090101] <- 7 # NA
+df_pat$Race[df_pat$ptid_p == 99785932] <- 7 # Other not specified
+
+### Ethnicity
+table(df_pat$Ethnicity, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Ethnicity"),
+            function(x) car::recode(x, "-99=9;NA=NA"))
+
+# 1  Hispanic/Latino
+# 2	 Not Hispanic/Latino
+# 9  NR
+
+### Race/Ethnicity
+
+df_pat$race_eth <- df_pat$Race*10+df_pat$Ethnicity
+
+# 11 White Hispanic/Latino 
+# 12 White Not Hispanic/Latino 
+# 19 White NR 
+# 21 African-American/Black Hispanic/Latino
+# 22 African-American/Black Not Hispanic/Latino
+# 29 African-American/Black NR
+# 32 Asian Not Hispanic/Latino
+# 39 Asian NR
+# 41 Native Hawaiian or Other Pacific Islander Hispanic/Latino
+# 42 Native Hawaiian or Other Pacific Islander Not Hispanic/Latino
+# 49 Native Hawaiian or Other Pacific Islander NR
+# 51 American Indian or Alaskan Native Hispanic/Latino
+# 52 American Indian or Alaskan Native Not Hispanic/Latino
+# 59 American Indian or Alaskan Native NR
+# 61 Hispanic/Latinox Hispanic/Latino
+# 71 Other Hispanic/Latino 
+# 72 Other Not Hispanic/Latino
+# 79 Other NR
+# 91 NR Hispanic/Latino
+# 92 NR Not Hispanic/Latino
+# 99 NR NR
+
+df_pat <- df_pat %>%
+  mutate_at(vars("race_eth"),
+            function(x) car::recode(x, "12=1;19=1;
+                                        21:29=2; 
+                                        11=3;41=3;51=3;61=3;71=3;91=3;
+                                        32:39=4;
+                                        41:49=5;
+                                        52:59=6;
+                                        72:79=7;
+                                        91:99=9;NA=NA"))
+
+
+a <- table(df_pat$race_eth, useNA = "ifany")
+round(prop.table(a)*100, 1)
+
+
+# 1 White Not Hispanic/Latino  
+# 2 African-American/Black 
+# 3 Hispanic any 
+# 4 Asian 
+# 5 Native Hawaiian or Other Pacific Islander 
+# 6 American Indian or Alaskan Native 
+# 7 Other 
+# 9 NR 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("race_eth"),
+            function(x) car::recode(x, "4:7=4;NA=NA"))
+
+# 1 White Not Hispanic/Latino  69.2  
+# 2 African-American/Black 11.4 
+# 3 Hispanic any 11.2    
+# 4 Other 5.0 
+# 9 NR 3.2 
+
+df_pat[c("race_eth")] <- lapply(df_pat[c("race_eth")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "9"), 
+                                 labels = c("White Non-Hispanic", 
+                                            "African-American",
+                                            "Hispanic",
+                                            "Other",
+                                            "NR"))
+
+### Insurance
+table(df_pat$Ins, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("Ins"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# 0 = No
+# 1 = Yes
+# 9 = NR
+
+df_pat[c("Ins")] <- lapply(df_pat[c("Ins")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### Paying
+table(df_pat$Paying, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Paying"),
+            function(x) car::recode(x, "-99=9;98=7;NA=NA"))
+
+# 1	None (self-pay)
+# 2	Grant funded
+# 3	Medicaid    - public
+# 4	Medicare    - public
+# 5	Medicaid and Medicare  - public
+# 6	Commercial insurance
+# 7 Other
+# 9 NR
+
+df_pat$Paying_rec <- df_pat$Paying
+df_pat <- df_pat %>%
+  mutate_at(vars("Paying_rec"),
+            function(x) car::recode(x, "1=1;2=2;3:5=3;6=4;7=5;NA=9"))
+
+a <- table(df_pat$Paying_rec, useNA = "ifany")
+round(prop.table(a)*100, 1)
+
+# 1	None (self-pay) 12.6
+# 2	Grant funded 7.6
+# 3	Public 73.3
+# 4	Commercial insurance 4.4
+# 5 Other 1.6
+# 9 NR 0.5
+
+# Others
+subset_df <- subset(df_pat, Paying == 7)
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, PayingSpecify = subset_df$PayingSpecify)
+patient_table ## 29 obs
+
+df_pat$Paying_rec[df_pat$ptid_p == 1035993] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 8647073] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 9472711] <- 3 # Special Needs Basic Care
+df_pat$Paying_rec[df_pat$ptid_p == 10004974] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 11372813] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 13449644] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 19081933] <- 3 # Pinellas Country Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 19883613] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 20743532] <- 9 # pending
+df_pat$Paying_rec[df_pat$ptid_p == 23170442] <- 5 # Baycare Endocarditis
+df_pat$Paying_rec[df_pat$ptid_p == 26850742] <- 5 # BAYCARE ENDOCARDITIS
+df_pat$Paying_rec[df_pat$ptid_p == 29604954] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 41088773] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 45318942] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 46320352] <- 4 # Athem
+df_pat$Paying_rec[df_pat$ptid_p == 49901171] <- 3 # Managed Care Program
+df_pat$Paying_rec[df_pat$ptid_p == 50681493] <- 5 # Baycare Endocarditis
+df_pat$Paying_rec[df_pat$ptid_p == 58184015] <- 3 # Minnesota Care
+df_pat$Paying_rec[df_pat$ptid_p == 63636603] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 74071764] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 74523303] <- 4 # Oxford
+df_pat$Paying_rec[df_pat$ptid_p == 76262633] <- 3 # Pinellas County Health Plan
+df_pat$Paying_rec[df_pat$ptid_p == 80350162] <- 3 # Ryan White and Medical Assistance
+df_pat$Paying_rec[df_pat$ptid_p == 80356952] <- 4 # Cigna
+df_pat$Paying_rec[df_pat$ptid_p == 97247435] <- 3 # Minnesota Care
+df_pat$Paying_rec[df_pat$ptid_p == 98347804] <- 5 # Baycare Endocarditis
+df_pat$Paying_rec[df_pat$ptid_p == 98545523] <- 3 # Special Needs Basic Care
+df_pat$Paying_rec[df_pat$ptid_p == 99258922] <- 5 # BAYCARE ENDOCARDITIS
+df_pat$Paying_rec[df_pat$ptid_p == 99550691] <- 9 # DCF
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Paying_rec"),
+            function(x) car::recode(x, "1=1;2=4;3=2;4=3;5=4;NA=9"))
+
+
+df_pat[c("Paying_rec")] <- lapply(df_pat[c("Paying_rec")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "9"), 
+                                 labels = c("None (self-pay)",
+                                            "Public",
+                                            "Commercial insurance",
+                                            "Grant funded or other",
+                                            "NR"))
+
+### Marital Status
+table(df_pat$Marital, useNA = "ifany")
+
+# 1	Never married
+# 2	Married (domestic partnership, cohabitating, significant partnership, etc.)
+# 3	Formerly married (widowed, divorced, etc.)
+# 4	Single (Unknown whether ever married)
+# 9 NR
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Marital"),
+            function(x) car::recode(x, "1=1;4=2;2=3;3=4;-99=9;NA=NA"))
+
+df_pat[c("Marital")] <- lapply(df_pat[c("Marital")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "9"), 
+                                 labels = c("Never married",
+                                            "Single (Unknown whether ever married)",
+                                            "Married",
+                                            "Formerly married",
+                                            "NR"))
+
+### Education
+table(df_pat$Education, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Education"),
+            function(x) car::recode(x, "-99=9"))
+
+# 1	< 8 years (no high school)
+# 2	Some high school
+# 3	High school graduate/GED
+# 4	Some college           - college or more
+# 5	College graduate       - college or more
+# 6	Graduate degree        - college or more
+# 9 NR
+
+df_pat$Education_rec <- df_pat$Education
+df_pat <- df_pat %>%
+  mutate_at(vars("Education_rec"),
+            function(x) car::recode(x, "1:2=1;3=2;4:6=3;9=9"))
+
+# 1	< 8 years (no high school)
+# 2	Some high school           
+# 3	High school graduate/GED   
+# 4	More than High school      
+# 9 NR                          
+
+df_pat[c("Education_rec")] <- lapply(df_pat[c("Education_rec")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "9"), 
+                                 labels = c("Less than high school",
+                                            "High school graduate/GED",
+                                            "More than High school",
+                                            "NR"))
+table(df_pat$Education_rec, useNA = "ifany")
+
+### Employment
+table(df_pat$Employment, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("Employment"),
+            function(x) car::recode(x, "-99=9;98=8;NA=9"))
+
+# 1	Full-time                                      
+# 2	Part-time
+# 3	Retired
+# 4	Disabled
+# 5	Student
+# 6	Unemployed (looking)
+# 7	Out of labor force (unemployed, not looking)
+# 9 NR
+
+df_pat$Employment_rec <- df_pat$Employment
+df_pat <- df_pat %>%
+  mutate_at(vars("Employment_rec"),
+            function(x) car::recode(x, "1:2=1;6=2;3:5=3;7=3;9=9;NA=NA"))
+
+a <- table(df_pat$Employment_rec, useNA = "ifany")
+round(prop.table(a)*100, 1)
+
+# 1	Employed                   
+# 2	Unemployed (looking)       
+# 3	Out of labor force         
+# 9 NR                          
+
+df_pat[c("Employment_rec")] <- lapply(df_pat[c("Employment_rec")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "9"), 
+                                 labels = c("Employed", 
+                                            "Unemployed (looking)",
+                                            "Out of labor force",
+                                            "NR"))
+
+### Housing
+table(df_pat$Housing, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("Housing"),
+            function(x) car::recode(x, "-99=9;98=8;NA=NA"))
+
+# 1	Homeless (e.g. street homeless, shelter resident)
+# 2	Unstable Housing (e.g. transiently housed by family or friends)
+# 3	Secure housing
+# 8	Other
+# 9 NR
+
+subset_df <- subset(df_pat, Housing == 8) # 64 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, HousingSpecify = subset_df$HousingSpecify)
+patient_table
+
+df_pat$Housing[df_pat$ptid_p == 28716001] <- 2 # Hotel
+df_pat$Housing[df_pat$ptid_p == 28813993] <- 2 # room
+df_pat$Housing[df_pat$ptid_p == 28987031] <- 2 # jail or treatment
+df_pat$Housing[df_pat$ptid_p == 44016311] <- 2 # Hotel
+df_pat$Housing[df_pat$ptid_p == 48711301] <- 2 # Incarcerated
+df_pat$Housing[df_pat$ptid_p == 52141202] <- 2 # Parole house
+df_pat$Housing[df_pat$ptid_p == 66025655] <- 2 # in jail past18months
+df_pat$Housing[df_pat$ptid_p == 74843451] <- 2 # Motel
+df_pat$Housing[df_pat$ptid_p == 79217241] <- 2 # Hotel
+df_pat$Housing[df_pat$ptid_p == 80713575] <- 2 # Incarcerated
+df_pat$Housing[df_pat$ptid_p == 99029071] <- 2 # hotel
+df_pat$Housing[df_pat$ptid_p == 12698435] <- 3 # Residential treatment
+df_pat$Housing[df_pat$ptid_p == 13449644] <- 3 # Residential Tx Facility
+df_pat$Housing[df_pat$ptid_p == 15794772] <- 3 # Sober housing
+df_pat$Housing[df_pat$ptid_p == 26850742] <- 3 # PAR Residential
+df_pat$Housing[df_pat$ptid_p == 31971662] <- 3 # Assisted living facility
+df_pat$Housing[df_pat$ptid_p == 33126685] <- 3 # MH Residential Treatment Facility
+df_pat$Housing[df_pat$ptid_p == 33283714] <- 3 # Assisted Living
+df_pat$Housing[df_pat$ptid_p == 33283715] <- 3 # Assisted Living Facility
+df_pat$Housing[df_pat$ptid_p == 34452954] <- 3 # Housing Program
+df_pat$Housing[df_pat$ptid_p == 38771113] <- 3 # living at Judson SNF
+df_pat$Housing[df_pat$ptid_p == 41983561] <- 3 # VOA Inpatient
+df_pat$Housing[df_pat$ptid_p == 42840225] <- 3 # group residential housing
+df_pat$Housing[df_pat$ptid_p == 43631514] <- 3 # Halfway house
+df_pat$Housing[df_pat$ptid_p == 47165595] <- 3 # supportive housing
+df_pat$Housing[df_pat$ptid_p == 47290492] <- 3 # Inpatient
+df_pat$Housing[df_pat$ptid_p == 47511062] <- 3 # Sober House
+df_pat$Housing[df_pat$ptid_p == 53997321] <- 3 # halfway house
+df_pat$Housing[df_pat$ptid_p == 59576093] <- 3 # Supportive Housing
+df_pat$Housing[df_pat$ptid_p == 60391724] <- 3 # Supportive Housing
+df_pat$Housing[df_pat$ptid_p == 64770183] <- 3 # Inpatient
+df_pat$Housing[df_pat$ptid_p == 65946991] <- 3 # Inpatient
+df_pat$Housing[df_pat$ptid_p == 66721772] <- 3 # inpatient treatment facility
+df_pat$Housing[df_pat$ptid_p == 72958331] <- 3 # MH Residential Treatment Facility
+df_pat$Housing[df_pat$ptid_p == 75529652] <- 3 # Sober Living at New Foundation
+df_pat$Housing[df_pat$ptid_p == 76811723] <- 3 # Inpatient
+df_pat$Housing[df_pat$ptid_p == 79373462] <- 3 # assisted living facility
+df_pat$Housing[df_pat$ptid_p == 79674534] <- 3 # Residential
+df_pat$Housing[df_pat$ptid_p == 81096105] <- 3 # Sober House
+df_pat$Housing[df_pat$ptid_p == 85020795] <- 3 # 1st Step Home
+df_pat$Housing[df_pat$ptid_p == 87039081] <- 3 # recovery house
+df_pat$Housing[df_pat$ptid_p == 87142591] <- 3 # Inpatient
+df_pat$Housing[df_pat$ptid_p == 88452912] <- 3 # Residential treatment facility
+df_pat$Housing[df_pat$ptid_p == 92599803] <- 3 # Group Home
+df_pat$Housing[df_pat$ptid_p == 93284861] <- 3 # recovery house
+df_pat$Housing[df_pat$ptid_p == 93483441] <- 3 # CD Treatment Facility
+df_pat$Housing[df_pat$ptid_p == 93665931] <- 3 # Group Residential Housing
+df_pat$Housing[df_pat$ptid_p == 93667431] <- 3 # Supportive Housing
+df_pat$Housing[df_pat$ptid_p == 97039483] <- 3 # sober living house
+df_pat$Housing[df_pat$ptid_p == 98347804] <- 3 # Residential-PAR
+df_pat$Housing[df_pat$ptid_p == 12692941] <- 8 # NA
+df_pat$Housing[df_pat$ptid_p == 14378904] <- 8 # per patient, "I live with a friend"
+df_pat$Housing[df_pat$ptid_p == 29790834] <- 8 # per patient, "live with a friend in a house"
+df_pat$Housing[df_pat$ptid_p == 33051854] <- 8 # Lives with a close friend
+df_pat$Housing[df_pat$ptid_p == 40302102] <- 8 # Stay by myself
+df_pat$Housing[df_pat$ptid_p == 44405634] <- 8 # per patient, "I live with my girlfriend"
+df_pat$Housing[df_pat$ptid_p == 48097591] <- 8 # NA
+df_pat$Housing[df_pat$ptid_p == 49465875] <- 8 # per patient, "with children"
+df_pat$Housing[df_pat$ptid_p == 50064464] <- 8 # "I live with my youngest son and girlfriend"
+df_pat$Housing[df_pat$ptid_p == 55193224] <- 8 # per patient, "on my own"
+df_pat$Housing[df_pat$ptid_p == 55923854] <- 8 # per patient- my girlfriend
+df_pat$Housing[df_pat$ptid_p == 58130394] <- 8 # per patient- with fiancee
+df_pat$Housing[df_pat$ptid_p == 62670484] <- 8 # per patient, "I live with my girlfriend"
+df_pat$Housing[df_pat$ptid_p == 69257512] <- 8 # NA
+
+df_pat[c("Housing")] <- lapply(df_pat[c("Housing")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "8",
+                                          "9"), 
+                                 labels = c("Homeless", 
+                                            "Unstable Housing",
+                                            "Secure housing",
+                                            "Other",
+                                            "NR"))
+
+### Arrest
+table(df_pat$Arrest, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("Arrest"),
+            function(x) car::recode(x, "-99=9;NA=NA"))
+
+# Not in the codebook
+# 0 
+# 1
+# 9 NR
+
+df_pat[c("Arrest")] <- lapply(df_pat[c("Arrest")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### Criminal
+table(df_pat$Criminal, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("Criminal"),
+            function(x) car::recode(x, "-99=9;98=8;NA=9")) # Had 2 NA
+
+# Not in the codebook
+# 0 
+# 1
+# 9 NR
+
+df_pat[c("Criminal")] <- lapply(df_pat[c("Criminal")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### HIV
+table(df_pat$HIV, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("HIV"),
+            function(x) car::recode(x, "-99=9;98=8;NA=NA")) 
+
+# Not in the codebook
+# 0 
+# 1
+# 9 NR
+
+df_pat[c("HIV")] <- lapply(df_pat[c("HIV")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### HepC
+table(df_pat$HepC, useNA = "ifany")
+df_pat <- df_pat %>%
+  mutate_at(vars("HepC"),
+            function(x) car::recode(x, "-99=9;98=8;NA=NA")) 
+
+# Not in the codebook
+# 0 
+# 1
+# 9 NR
+
+df_pat[c("HepC")] <- lapply(df_pat[c("HepC")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### Primary drug
+table(df_pat$DrugPrim, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugPrim"),
+            function(x) car::recode(x, "-99=99;98=99;NA=NA")) 
+
+# 1	Opioids (heroin/fentanyl/prescription opioids, etc.)
+# 2	Alcohol
+# 3	Cocaine
+# 4	Cannabis
+# 5	Hallucinogens
+# 6	PCP
+# 7	Amphetamine
+# 8	Methamphetamine
+# 9	Benzodiazepines
+# 10	Other - 1 patient said Kratum
+
+subset_df <- subset(df_pat, DrugPrim == 99) # 0 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, DrugPrimSpecify = subset_df$DrugPrimSpecify)
+patient_table
+
+df_pat$DrugPrim[df_pat$ptid == 79564101] <- 10 # Kratum
+
+### Primary drug Route
+table(df_pat$DrugPrimRoute, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugPrimRoute"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 1	
+# 2	
+# 3	
+# 4	
+# 9	NR
+
+### Primary drug Age
+table(df_pat$DrugPrimAge, useNA = "ifany") # Could construct years since initiation
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugPrimAge"),
+            function(x) car::recode(x, "-99=99;NA=NA")) # 75 participants have NR
+
+### Secondary drug
+table(df_pat$DrugSec, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugSec"),
+            function(x) car::recode(x, "-99=99;98=10;NA=NA")) 
+
+# 0	None
+# 1	Opioids (heroin/fentanyl/prescription opioids, etc.)
+# 2	Alcohol
+# 3	Cocaine
+# 4	Cannabis
+# 5	Hallucinogens
+# 6	PCP
+# 7	Amphetamine
+# 8	Methamphetamine
+# 9	Benzodiazepines
+# 10	Other
+# 99 NR
+
+subset_df <- subset(df_pat, DrugSec == 10) # 88 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, DrugSecSpecify = subset_df$DrugSecSpecify)
+patient_table
+
+df_pat$DrugSec[df_pat$ptid_p == 9242643] <- 0 # Ativan in the past
+df_pat$DrugSec[df_pat$ptid_p == 16281735] <- 1 # Non-Rx Methadone
+df_pat$DrugSec[df_pat$ptid_p == 58555261] <- 1 # Percocet
+df_pat$DrugSec[df_pat$ptid_p == 72768035] <- 7 # Ecstasy
+df_pat$DrugSec[df_pat$ptid_p == 80865811] <- 7 # Ecstasy
+df_pat$DrugSec[df_pat$ptid_p == 1273712] <- 9 # Valium
+df_pat$DrugSec[df_pat$ptid_p == 71326932] <- 9 # Xanax
+df_pat$DrugSec[df_pat$ptid_p == 3581925] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 5738745] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 7272862] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 7334062] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 7493263] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 10008592] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 12848705] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 13448723] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 13618301] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 15419171] <- 10 # Sedatives
+df_pat$DrugSec[df_pat$ptid_p == 17330035] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 18308463] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 18482651] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 20743532] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 23963972] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 24270025] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 24453663] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 26396444] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 27759221] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 27886453] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 28633223] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 28813993] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 28987031] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 30741012] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 31472732] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 32229735] <- 10 # nicotine
+df_pat$DrugSec[df_pat$ptid_p == 32576645] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 33283714] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 33283715] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 34328182] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 34452954] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 37390432] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 37409991] <- 10 # Glutethimide-Sedative
+df_pat$DrugSec[df_pat$ptid_p == 40302102] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 40333401] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 40489335] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 40626535] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 41931235] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 43595181] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 44202831] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 44405634] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 46414445] <- 10 # Sedatives/Hypnotics
+df_pat$DrugSec[df_pat$ptid_p == 47240921] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 47329831] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 47975154] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 48711301] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 49327714] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 50116263] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 51742743] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 51788322] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 51832651] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 56178731] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 56829275] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 56844492] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 56884602] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 59897744] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 59910433] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 60773582] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 60773583] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 61542555] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 62652992] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 62652993] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 63230091] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 65355152] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 69234813] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 73010575] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 73748052] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 74940894] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 78681491] <- 10 # Tobacco
+df_pat$DrugSec[df_pat$ptid_p == 79164753] <- 10 # Stimulants-Unspecified
+df_pat$DrugSec[df_pat$ptid_p == 79416721] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 80925283] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 81096105] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 82480414] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 84958084] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 90963132] <- 10 # tobacco
+df_pat$DrugSec[df_pat$ptid_p == 94982631] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 95296125] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 97247435] <- 10 # nicotine
+df_pat$DrugSec[df_pat$ptid_p == 98143285] <- 10 # Nicotine
+df_pat$DrugSec[df_pat$ptid_p == 98545523] <- 10 # Nicotine
+
+### Secondary drug Route
+table(df_pat$DrugSecRoute, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugSecRoute"),
+            function(x) car::recode(x, "-99=9;NA=NA")) 
+
+df_pat$DrugSecRoute[is.na(df_pat$DrugSec)] <- NA
+df_pat$DrugSecRoute[df_pat$DrugSec==0] <- NA
+
+# table(df_pat$DrugSec, df_pat$DrugSecRoute) 44 participants with NR in DrugSec and NR in DrugSecRoute
+
+# Not in the codebook
+# 1	
+# 2	
+# 3	
+# 4	
+# 9	NR
+
+### Secondary drug Age
+table(df_pat$DrugSecAge, useNA = "ifany") # Could construct years since initiation
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugSecAge"),
+            function(x) car::recode(x, "-99=99")) 
+
+df_pat$DrugSecAge[is.na(df_pat$DrugSec)] <- NA
+df_pat$DrugSecAge[df_pat$DrugSec==0] <- NA # 365 participants with NR
+
+### Tertiary drug
+table(df_pat$DrugTer, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugTer"),
+            function(x) car::recode(x, "-99=99;98=10;NA=NA")) 
+
+# 0	None
+# 1	Opioids (heroin/fentanyl/prescription opioids, etc.)
+# 2	Alcohol
+# 3	Cocaine
+# 4	Cannabis
+# 5	Hallucinogens
+# 6	PCP
+# 7	Amphetamine
+# 8	Methamphetamine
+# 9	Benzodiazepines
+# 10	Other
+# 99 NR
+
+subset_df <- subset(df_pat, DrugTer == 10) # 127 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, DrugTerSpecify = subset_df$DrugTerSpecify)
+patient_table
+
+df_pat$DrugTer[df_pat$ptid_p == 3032301] <- 1 # BUP
+df_pat$DrugTer[df_pat$ptid_p == 10043904] <- 1 # BUP
+df_pat$DrugTer[df_pat$ptid_p == 47102904] <- 5 # Hallucinogenic mushrooms
+df_pat$DrugTer[df_pat$ptid_p == 98591641] <- 7 # UDS+MDMA
+df_pat$DrugTer[df_pat$ptid_p == 73505092] <- 9 # Diazepam 2 mg bars
+df_pat$DrugTer[df_pat$ptid_p == 2004821] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 2230165] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 2615123] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 3889431] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 4914634] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 6227432] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 8454281] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 9472711] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 9768245] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 10507481] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 12692941] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 13125842] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 14378904] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 14959654] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 15794772] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 16258301] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 22425571] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 22714235] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 24882173] <- 10 # Kratom
+df_pat$DrugTer[df_pat$ptid_p == 25689503] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 26290701] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 27360072] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 28567294] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 29420595] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 29572605] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 30039755] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 30637341] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 31497734] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 34431931] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 37378663] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 38165605] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 38397654] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 38464812] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 38786114] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 39826984] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 39833492] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 39833493] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 42042925] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 42840225] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 44375684] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 45739455] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 46320352] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 46457752] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 46905015] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 47153315] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 47511062] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 47634722] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 49492961] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 49606755] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 51217405] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 52960052] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 55193224] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 55923854] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 55923855] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 58130394] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 58184015] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 58354881] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 59274633] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 59550492] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 59550493] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 59576093] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 60039725] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 60675812] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 62670484] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 64184411] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 65831181] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 67579554] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 67872031] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 68422664] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 70686501] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 71089802] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 71089803] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 71879471] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 72144184] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 72144185] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 72820632] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 72820633] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 73071301] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 73878054] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 75518411] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 75871055] <- 10 # Ambien
+df_pat$DrugTer[df_pat$ptid_p == 76413251] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 77124531] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 77503781] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 79718374] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 80356952] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 80356953] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 80865811] <- 10 # Ketamine
+df_pat$DrugTer[df_pat$ptid_p == 81410501] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 82288195] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 82764281] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 84492011] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 84495945] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 84656792] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 84656793] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 85744181] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 86190734] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 87059051] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 87351021] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 87749094] <- 10 # nicotine
+df_pat$DrugTer[df_pat$ptid_p == 88010561] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 89276903] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 89537663] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 90396674] <- 10 # Kratom
+df_pat$DrugTer[df_pat$ptid_p == 90562044] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 92526091] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 92878792] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 93483441] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 93665931] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 93667431] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 93712304] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 94253001] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 94322281] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 94624713] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 95466665] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 95987961] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 96113293] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 96448331] <- 10 # Tobacco
+df_pat$DrugTer[df_pat$ptid_p == 97230772] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 98109633] <- 10 # Nicotine
+df_pat$DrugTer[df_pat$ptid_p == 98429111] <- 10 # tobacco
+df_pat$DrugTer[df_pat$ptid_p == 98874375] <- 10 # tobacco
+
+### Terciary drug Route
+table(df_pat$DrugTerRoute, useNA = "ifany")
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugTerRoute"),
+            function(x) car::recode(x, "-99=9;NA=NA")) 
+
+df_pat$DrugTerRoute[is.na(df_pat$DrugTer)] <- NA
+df_pat$DrugTerRoute[df_pat$DrugTer==0] <- NA
+
+# table(df_pat$DrugTer, df_pat$DrugTerRoute) 105 participants with NR in DrugTer and NR in DrugTerRoute
+
+# Not in the codebook
+# 1	
+# 2	
+# 3	
+# 4	
+# 9	NR
+
+### Terciary drug Age
+table(df_pat$DrugTerAge, useNA = "ifany") # Could construct years since initiation
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DrugTerAge"),
+            function(x) car::recode(x, "-99=99;NA=NA")) # Participants have a 0 or 4 years, should check this
+
+df_pat$DrugTerAge[is.na(df_pat$DrugTer)] <- NA
+df_pat$DrugTerAge[df_pat$DrugTer==0] <- NA
+
+# 296 participants with NR
+
+### Difference between current age and first opioid use
+
+df_pat <- mutate(df_pat, opioid_ini = case_when(DrugPrim == 1  ~ DrugPrimAge,
+                                            TRUE ~ 999))
+table(df_pat$opioid_ini, useNA = "ifany")
+
+df_pat$opioid_ini[df_pat$opioid_ini == 99 & df_pat$DrugSec==1] <- df_pat$DrugSecAge
+df_pat$opioid_ini[na.omit(df_pat$opioid_ini == 999 & df_pat$DrugSec==1)] <- df_pat$DrugSecAge
+
+df_pat$opioid_ini[df_pat$opioid_ini == 99 & df_pat$DrugTer==1] <- df_pat$DrugTerAge
+df_pat$opioid_ini[df_pat$opioid_ini == 999 & df_pat$DrugTer==1] <- df_pat$DrugTerAge
+
+df_pat <- df_pat %>%
+  mutate_at(vars("opioid_ini"),
+            function(x) car::recode(x, "0=NA;99:999=NA")) 
+
+df_pat$diff_opioid <- df_pat$age-df_pat$opioid_ini
+
+subset_df <- subset(df_pat, DrugPrim == 1) 
+table(subset_df$DrugPrimAge)
+table(df_pat$diff_opioid)
+
+subset_df <- subset(df_pat, diff_opioid < 0) # 4 observations
+patient_table <- data.frame(ptid_p = subset_df$ptid_p, diff_opioid = subset_df$diff_opioid)
+patient_table
+
+df_pat <- df_pat %>%
+  mutate_at(vars("diff_opioid"),
+            function(x) car::recode(x, "-6:-1=NA")) 
+
+### Primary route of usage of opioids
+df_pat <- mutate(df_pat, opioid_route = case_when(DrugPrim == 1  ~ DrugPrimRoute,
+                                                  TRUE ~ 999))
+
+df_pat$opioid_route[df_pat$opioid_route == 9 & df_pat$DrugSec==1] <- df_pat$DrugSecRoute
+df_pat$opioid_route[na.omit(df_pat$opioid_route == 999 & df_pat$DrugSec==1)] <- df_pat$DrugSecRoute
+
+df_pat$opioid_route[df_pat$opioid_route == 9 & df_pat$DrugTer==1] <- df_pat$DrugTerRoute
+df_pat$opioid_route[df_pat$opioid_route == 999 & df_pat$DrugTer==1] <- df_pat$DrugTerRoute
+
+table(df_pat$opioid_route)
+
+df_pat <- df_pat %>%
+  mutate_at(vars("opioid_route"),
+            function(x) car::recode(x, "999=9")) 
+
+df_pat[c("opioid_route")] <- lapply(df_pat[c("opioid_route")], factor,
+                                 levels=c("1", 
+                                          "2", 
+                                          "3", 
+                                          "4",
+                                          "9"), 
+                                 labels = c("Oral", 
+                                            "Smoking",
+                                            "Intranasal",
+                                            "Injection",
+                                            "NR"))
+
+### Opioid use
+df_pat <- mutate(df_pat, opioid = case_when(DrugPrim == 1 | DrugSec == 1 | DrugTer == 1  ~ 1,
+                                            TRUE ~ 0))
+
+### Alcohol use
+df_pat <- mutate(df_pat, alcohol = case_when(DrugPrim == 2 | DrugSec == 2 | DrugTer == 2  ~ 1,
+                                            TRUE ~ 0))
+
+### Cocaine use
+df_pat <- mutate(df_pat, cocaine = case_when(DrugPrim == 3 | DrugSec == 3 | DrugTer == 3  ~ 1,
+                                            TRUE ~ 0))
+
+### Cannabis use
+df_pat <- mutate(df_pat, cannabis = case_when(DrugPrim == 4 | DrugSec == 4 | DrugTer == 4  ~ 1,
+                                            TRUE ~ 0))
+
+### Hallucinogens use
+df_pat <- mutate(df_pat, halluci = case_when(DrugPrim == 5 | DrugSec == 5 | DrugTer == 5  ~ 1,
+                                            TRUE ~ 0))
+
+### PCP use
+df_pat <- mutate(df_pat, PCP = case_when(DrugPrim == 6 | DrugSec == 6 | DrugTer == 6  ~ 1,
+                                            TRUE ~ 0))
+
+### Amphetamine use
+df_pat <- mutate(df_pat, ampheta = case_when(DrugPrim == 7 | DrugSec == 7 | DrugTer == 7  ~ 1,
+                                            TRUE ~ 0))
+
+### Meth use
+df_pat <- mutate(df_pat, meth = case_when(DrugPrim == 8 | DrugSec == 8 | DrugTer == 8  ~ 1,
+                                            TRUE ~ 0))
+
+### Benzo use
+df_pat <- mutate(df_pat, benzo = case_when(DrugPrim == 9 | DrugSec == 9 | DrugTer == 9  ~ 1,
+                                            TRUE ~ 0))
+
+### Other use
+df_pat <- mutate(df_pat, other_use = case_when(DrugPrim == 10 | DrugSec == 10 | DrugTer == 10  ~ 1,
+                                            TRUE ~ 0))
+
+df_pat[c("opioid","alcohol","cocaine","cannabis","halluci","PCP","ampheta","meth","benzo","other_use")] <- lapply(df_pat[c("opioid","alcohol","cocaine","cannabis","halluci","PCP","ampheta","meth","benzo","other_use")], factor,
+                                 levels=c("0", 
+                                          "1"), 
+                                 labels = c("No", 
+                                            "Yes"))
+### Tobacco
+table(df_pat$Tobacco, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Tobacco"),
+            function(x) car::recode(x, "-99=9;NA=NA"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+df_pat[c("Tobacco")] <- lapply(df_pat[c("Tobacco")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+### TxDate
+table(df_pat$TxDate, useNA = "ifany") # 408 NA, in the spreadsheet they have a "-363"
+
+### DisAlcohol
+table(df_pat$DisAlcohol, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisAlcohol"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisOpioid
+table(df_pat$DisOpioid, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisOpioid"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisCannabis
+table(df_pat$DisCannabis, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisCannabis"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisCocaine
+table(df_pat$DisCocaine, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisCocaine"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisStimulant
+table(df_pat$DisStimulant, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisStimulant"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisPCP
+table(df_pat$DisPCP, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisPCP"),
+            function(x) car::recode(x, "-99=9;NA=9")) # Has 1 NA
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisBenzo
+table(df_pat$DisBenzo, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisBenzo"),
+            function(x) car::recode(x, "-99=9;NA=9")) # Has 1 NA
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisDrugOther
+table(df_pat$DisDrugOther, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("DisDrugOther"),
+            function(x) car::recode(x, "-99=9;NA=9")) # Has 1 NA
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### DisDrugOtherSpecify
+subset_df <- subset(df_pat, DisDrugOther == 1) # 780 observations
+patient_table <- data.frame(ptid = subset_df$ptid, DisDrugOtherSpecify = subset_df$DisDrugOtherSpecify)
+patient_table
+
+### Anxiety
+table(df_pat$Anxiety, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Anxiety"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### PTSD
+table(df_pat$PTSD, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("PTSD"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### Depression
+table(df_pat$Depression, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Depression"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### Psychotic
+table(df_pat$Psychotic, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Psychotic"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### Bipolar
+table(df_pat$Bipolar, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Bipolar"),
+            function(x) car::recode(x, "-99=9;NA=9")) 
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### Behavior
+table(df_pat$Behavior, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("Behavior"),
+            function(x) car::recode(x, "-99=9;NA=9")) # Has 1 NA
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+### ComorbidOther
+table(df_pat$ComorbidOther, useNA = "ifany") 
+
+df_pat <- df_pat %>%
+  mutate_at(vars("ComorbidOther"),
+            function(x) car::recode(x, "-99=9;NA=9"))
+
+# Not in the codebook
+# 0	
+# 1	
+# 9	NR
+
+comor <- df_pat %>%
+  mutate(across(Anxiety:ComorbidOther, ~ ifelse(. > 1, 0, .))) %>%
+  mutate(sum_comor = rowSums(dplyr::select(., Anxiety:ComorbidOther))) %>%
+  distinct(ptid, sum_comor)
+
+comor <- comor %>%
+  mutate_at(vars("sum_comor"),
+            function(x) car::recode(x, "1:7=1;NA=NA"))
+
+df_pat <- merge(df_pat,comor,by="ptid") # data merge
+
+df_pat[c("Anxiety","PTSD","Psychotic","Bipolar","Behavior", "ComorbidOther", "sum_comor")] <- 
+  lapply(df_pat[c("Anxiety","PTSD","Psychotic","Bipolar","Behavior", "ComorbidOther", "sum_comor")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No", 
+                                            "Yes",
+                                            "NR"))
+
+subset_df <- subset(df_pat, ComorbidOther == "Yes") # 178 observations
+patient_table <- data.frame(ptid = subset_df$ptid, ComorbidOtherSpecify = subset_df$ComorbidOtherSpecify)
+patient_table
+```
+
+# Save dataset
+```{r eval=FALSE}
+save(df_pat, file = "pat_data.Rda")
+```

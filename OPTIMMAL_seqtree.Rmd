@@ -1,0 +1,1875 @@
+---
+title: "OPTIMMAL_seqtree"
+author: "Ignacio Borquez Infante"
+date: "2023-05-25"
+output: html_document
+---
+
+# Directory
+```{r}
+options(max.print=10000)
+setwd("C:/Users/ib2473/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+#setwd("C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data")
+```
+
+# Packages
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(TraMineR)
+library(RColorBrewer)
+library(colorspace)
+library(TraMineRextras)
+library(WeightedCluster)
+library(NbClust)
+library(cluster)
+library(arsenal)
+library(texreg)
+library(PST)
+library(xtable)
+library(data.table)
+library(hash)
+```
+
+# Load ready to use datasets
+```{r}
+load("disp_data.Rda")
+load("pat_data.Rda")
+load("chg_data.Rda")
+load("data_daily_urine3.Rda")
+```
+
+# Merge
+```{r}
+# df_pat and df_disp
+df_pat <- select(df_pat,
+                 ptid, ptid_p, # IDs
+                 age_groups, Gender, race_eth, Education_rec, Employment_rec, Marital, Housing, # Sociodemographics
+                 Paying_rec, Criminal, # Risk factors
+                 opioid_route, diff_opioid, # Opioid use
+                 alcohol, cocaine, cannabis, ampheta, meth, benzo, Tobacco, sum_comor) # Psychiatric comorbidities
+
+
+unique_data <- unique_data[, -c(3)] 
+
+df_seq <- merge(unique_data,df_pat,by="ptid_p", all = TRUE) # data merge
+
+# df_seq and df_chg
+df_seq <- merge(df_seq,df_chg,by="ptid_p", all = TRUE) # data merge
+
+table(df_seq$died, useNA = "ifany")
+df_seq$died[is.na(df_seq$died)] <- 0
+
+table(df_seq$incar, useNA = "ifany")
+df_seq$incar[is.na(df_seq$incar)] <- 0
+
+# df_seq and df_uri_unique
+#names(unique_uri)
+unique_uri <- select(unique_uri, 
+                     ptid_p, min_date_uri2, max_date_uri2, tot_time2, Max_UrineNum,
+                     per_oop, 	per_coc, 	per_benz) 
+
+table(unique_uri$per_oop, useNA = "ifany")
+table(unique_uri$per_coc, useNA = "ifany")
+table(unique_uri$per_benz, useNA = "ifany")
+
+unique_uri <- unique_uri %>%
+  mutate_at(vars("per_oop", "per_coc", "per_benz"),
+            function(x) car::recode(x, "0=0;0.000001:1=1;NA=0"))
+
+df_seq <- merge(df_seq,unique_uri,by="ptid_p", all = TRUE) # data merge
+
+```
+
+# Filter
+## 1a 
+```{r}
+df_seq_1a <- subset(df_seq, Pop == 1)
+```
+
+## 1b
+```{r}
+df_seq_1b <- subset(df_seq, Pop == 2)
+```
+
+# Sequence analysis
+## Takehome 1a
+```{r}
+
+df_seq_1a[c(8:187)] <- lapply(df_seq_1a[c(8:187)], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5"), 
+                                 labels = c("In-clinic",
+                                            "Holiday/Weekend",
+                                            "Take-home",
+                                            "No dose",
+                                            "Censored"))
+
+#Labels for sequences
+one.labels <- c("In-clinic",
+                "Holiday/Weekend",
+                "Take-home",
+                "No dose",
+                "Censored")
+
+#Abbreviations
+one.scode <-c('IC',
+              'HW',
+              'TH',
+              'NO',
+              'CE')
+
+one.alphabet <- c("In-clinic",
+                "Holiday/Weekend",
+                "Take-home",
+                "No dose",
+                "Censored")
+
+# Defining colors
+colors <- c("#8DEAF0", "#4685F0", "#F02286",
+            "#E6E6E6", "#FFFFFF")
+
+#Sequence object
+tk.seq <- seqdef(df_seq_1a,
+                 var = 8:187,
+                 left="DEL",
+                 states=one.scode,
+                 missing = NA,
+                 labels = one.labels,
+                 cpal=colors,
+                 alphabet = one.alphabet,
+                 xtstep=30,
+                 start=0)
+
+seqlegend(tk.seq, fontsize = 1.5)
+day <-c(0:180)
+```
+
+### Graphs 1a
+```{r eval=FALSE}
+png("Output/Takehome/Article/1a_tk_dist.png", width = 1000, height = 500, units = "px")
+seqdplot(tk.seq, with.legend = "right", ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission")
+dev.off()
+
+png("Output/Takehome/Article/1a_tk_freq.png", width = 1000, height = 500, units = "px")
+seqIplot(tk.seq, with.legend = "right", ylab="Frequency", xtlab=day, main = "", border = NA,
+         xlab="Days since first admission",
+         sortv = "from.end")
+dev.off()
+
+png("Output/Takehome/Article/1a_tk_mod.png", width = 1000, height = 200, units = "px")
+seqmsplot(tk.seq, with.legend = "right", ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission")
+dev.off()
+
+png("Output/Takehome/Article/1a_site_dist.png", width = 700, height = 1500, units = "px")
+seqdplot(tk.seq, group = df_seq_1a$site, with.legend = "right", ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 9, cols = 1,
+         cex.axis=1.5 , cex.main = 2)
+dev.off()
+```
+
+### Dissimilary matrix
+```{r eval=FALSE}
+dist.dhd <- seqdist(tk.seq, method="LCS")
+```
+
+### Multifactor analysis
+```{r eval=FALSE}
+## Positive urine of opioids after intake
+tk.mfac = dissmfacw(dist.dhd ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec + Pop +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                    data = df_seq_tree, 
+                    R = 5000)
+
+tt = data.table(tk.mfac$mfac[order(-tk.mfac$mfac$PseudoR2), ])
+
+total = tt[Variable == "Total"]
+rest = tt[Variable != "Total"]
+
+name_vars = c("Gender", "age_groups", "race_eth", "Paying_rec", "Marital", "Education_rec", "Pop", "Employment_rec", 
+              "Housing", "Criminal", "alcohol", "cocaine", "cannabis", "meth", "benzo", "diff_opioid", "opioid_route", 
+              "sum_comor", "site")
+
+label_vars = c("Gender", "Age groups", "Race/Ethnicity", "Payment type", "Marital status", "Education", 
+               "Population", "Employment", "Housing situation", "Lifetime Criminal involvement", 
+               "Alcohol", "Cocaine", "Cannabis", "Methamphetamine", "Benzodiazepine", "Difference opioid initiation and current age", 
+               "Main route of administration: opioid", "Psychiatric comorbidity", "Site")
+
+dict_vars = hash(name_vars, label_vars)
+rest[, Variable := values(dict_vars, rest[["Variable"]])]
+tt = rbind(rest, total)
+setnames(tt,
+       names(tt),
+       c("Covariate", "Pseudo F", "Pseudo $R^2$", "p-value"))
+
+caption = paste0("Multi-factor discrepancy analysis for Methadone Dispensing")
+
+label = "tab:discrepancy_job"
+ptab = print(xtable(tt, caption = caption, label = label, align = "llccc"),
+             include.rownames = FALSE,
+             caption.placement = "top",
+             table.placement = "htp",
+             sanitize.text.function=function(x) {x})
+ptab
+```
+
+### Regression tree - all covariates
+```{r eval=FALSE}
+df_seq_1a$Housing <- droplevels(df_seq_1a$Housing)
+df_seq_1a$sum_comor <- droplevels(df_seq_1a$sum_comor)
+df_seq_1a$Paying_rec <- droplevels(df_seq_1a$Paying_rec)
+df_seq_1a$site <- as.factor(df_seq_1a$site)
+
+st_tk <- seqtree(tk.seq ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec  +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                 data = df_seq_1a, 
+                 R = 5000, 
+                 diss = dist.dhd,
+                 weight.permutation = "diss",
+                 max.depth = 10,
+                 pval = 0.05)
+
+seqtree2dot(st_tk, filename="mytree", type = "I", border = NA, cex.main = 2, sortv = "from.end")
+
+# Save the regression tree as a PNG image
+png("Output/Takehome/Reg_tree/st_tk.png", width = 11, height = 8.5)
+seqtreedisplay(st_tk, type = "I", border = NA, image.format = "png", gvpath = 'C:/Program Files/Graphviz',
+               cex.main = 2,
+         sortv = "from.end")
+dev.off()
+```
+
+## Takehome 1b
+```{r}
+df_seq_1b[c(8:187)] <- lapply(df_seq_1b[c(8:187)], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5"), 
+                                 labels = c("In-clinic",
+                                            "Holiday/Weekend",
+                                            "Take-home",
+                                            "No dose",
+                                            "Censored"))
+
+#Sequence object
+tk.seq <- seqdef(df_seq_1b,
+                 var = 8:187,
+                 left="DEL",
+                 states=one.scode,
+                 missing = NA,
+                 labels = one.labels,
+                 cpal=colors,
+                 alphabet = one.alphabet,
+                 xtstep=30,
+                 start=0)
+```
+
+### Graphs 1b
+```{r eval=FALSE}
+png("Output/Takehome/Article/1b_tk_dist.png", width = 1000, height = 500, units = "px")
+seqdplot(tk.seq, with.legend = "right", ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission")
+dev.off()
+
+png("Output/Takehome/Article/1b_tk_freq.png", width = 1000, height = 500, units = "px")
+seqIplot(tk.seq, with.legend = "right", ylab="Frequency", xtlab=day, main = "", border = NA,
+         xlab="Days since first admission",
+         sortv = "from.end")
+dev.off()
+
+png("Output/Takehome/Article/1b_tk_mod.png", width = 1000, height = 200, units = "px")
+seqmsplot(tk.seq, with.legend = "right", ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission")
+dev.off()
+
+png("Output/Takehome/Article/1b_site_dist.png", width = 700, height = 1500, units = "px")
+seqdplot(tk.seq, group = df_seq_1b$site, with.legend = "right", ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 9, cols = 1,
+         cex.axis=1.5 , cex.main = 2)
+dev.off()
+```
+
+### Dissimilary matrix
+```{r eval=FALSE}
+dist.dhd <- seqdist(tk.seq, method="LCS")
+```
+
+### Multifactor analysis
+```{r eval=FALSE}
+## Positive urine of opioids after intake
+tk.mfac = dissmfacw(dist.dhd ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec + Pop +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                    data = df_seq_tree, 
+                    R = 5000)
+
+tt = data.table(tk.mfac$mfac[order(-tk.mfac$mfac$PseudoR2), ])
+
+total = tt[Variable == "Total"]
+rest = tt[Variable != "Total"]
+
+name_vars = c("Gender", "age_groups", "race_eth", "Paying_rec", "Marital", "Education_rec", "Pop", "Employment_rec", 
+              "Housing", "Criminal", "alcohol", "cocaine", "cannabis", "meth", "benzo", "diff_opioid", "opioid_route", 
+              "sum_comor", "site")
+
+label_vars = c("Gender", "Age groups", "Race/Ethnicity", "Payment type", "Marital status", "Education", 
+               "Population", "Employment", "Housing situation", "Lifetime Criminal involvement", 
+               "Alcohol", "Cocaine", "Cannabis", "Methamphetamine", "Benzodiazepine", "Difference opioid initiation and current age", 
+               "Main route of administration: opioid", "Psychiatric comorbidity", "Site")
+
+dict_vars = hash(name_vars, label_vars)
+rest[, Variable := values(dict_vars, rest[["Variable"]])]
+tt = rbind(rest, total)
+setnames(tt,
+       names(tt),
+       c("Covariate", "Pseudo F", "Pseudo $R^2$", "p-value"))
+
+caption = paste0("Multi-factor discrepancy analysis for Methadone Dispensing")
+
+label = "tab:discrepancy_job"
+ptab = print(xtable(tt, caption = caption, label = label, align = "llccc"),
+             include.rownames = FALSE,
+             caption.placement = "top",
+             table.placement = "htp",
+             sanitize.text.function=function(x) {x})
+ptab
+```
+
+### Regression tree - all covariates
+```{r eval=FALSE}
+df_seq_1b$Housing <- droplevels(df_seq_1b$Housing)
+df_seq_1b$sum_comor <- droplevels(df_seq_1b$sum_comor)
+df_seq_1b$Paying_rec <- droplevels(df_seq_1b$Paying_rec)
+df_seq_1b$site <- as.factor(df_seq_1b$site)
+
+st_tk <- seqtree(tk.seq ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec  +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                 data = df_seq_1b, 
+                 R = 5000, 
+                 diss = dist.dhd,
+                 weight.permutation = "diss",
+                 max.depth = 10,
+                 pval = 0.05)
+
+seqtree2dot(st_tk, filename="mytree", type = "I", border = NA, cex.main = 2, sortv = "from.end")
+
+# Save the regression tree as a PNG image
+png("Output/Takehome/Reg_tree/st_tk.png", width = 11, height = 8.5)
+seqtreedisplay(st_tk, type = "I", border = NA, image.format = "png", gvpath = 'C:/Program Files/Graphviz',
+               cex.main = 2,
+         sortv = "from.end")
+dev.off()
+```
+
+
+# Regression tree
+## Filter
+```{r}
+df_seq_tree <- subset(df_seq, Pop == 1 | Pop == 2)
+
+df_seq_tree$Housing <- droplevels(df_seq_tree$Housing)
+df_seq_tree$sum_comor <- droplevels(df_seq_tree$sum_comor)
+df_seq_tree$Paying_rec <- droplevels(df_seq_tree$Paying_rec)
+df_seq_tree$site2 <- df_seq_tree$site
+df_seq_tree$site <- as.factor(df_seq_tree$site)
+
+df_seq_tree <- df_seq_tree %>%
+  mutate_at(vars("Pop"),
+            function(x) car::recode(x, "1=2;2=1"))
+
+df_seq_tree[c("Pop")] <- lapply(df_seq_tree[c("Pop")], factor,
+                                 levels=c("1", 
+                                          "2"), 
+                                 labels = c("Pre", 
+                                            "Post"))
+
+```
+
+## Table 1
+```{r eval=FALSE}
+table_1 <- tableby(site ~ Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec +
+                         Employment_rec + Housing + Criminal + alcohol + cocaine +
+                         cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor +  
+                         count_total + count_type1 + prct_type1 + count_type2 + prct_type2 + 
+                         count_type3 + prct_type3 + count_type4 + prct_type4 + tot_time_months,
+                   data = df_seq_tree, numeric.stats=c("mean", "sd", "median", "q1q3", "min", "max", "Nmiss", "N"),
+                   digits=3, digits.p=3, digits.pct=1)
+
+# Creating labels
+mylabels <- list(site = "Site",
+Gender = "Sex",
+age_groups = "Age groups",
+race_eth = "Race/Ethnicity",
+Paying_rec = "Type of insurance",
+Marital = "Marital status",
+Education_rec = "Education",
+Employment_rec = "Employment",
+Housing = "Housing status",
+Criminal = "Lifetime criminal legal involvement",
+alcohol = "Alcohol use intake",
+cocaine = "Cocaine use intake",
+cannabis = "Cannabis use intake",
+meth = "Methamphetamine use intake",
+benzo = "Benzodiazepines use intake",
+diff_opioid = "Difference between opioid initiation and current age",
+opioid_route = "Route of administration of opioids",
+sum_comor = "At least one psychiatric comorbidity",
+count_total = "Total number of encounters",
+count_type1 = "Number of days in-clinic",
+prct_type1 = "Proportion of days in-clinic",
+count_type2 = "Number of days weekend/holidays",
+prct_type2 = "Proportion of days weekend/holidays",
+count_type3 = "Number of days take-home",
+prct_type3 = "Proportion of days take-home",
+count_type4 = "Number of days missed dose",
+prct_type4 = "Proportion of days missed dose",
+tot_time_months = "Total months observed",
+Max_UrineNum = "Number of urine tests",
+count_op = "Number of positive urine test: Opioids",
+per_op = "Proportion of positive urine test: Opioids",
+count_oxy = "Number of positive urine test: Oxycontin",
+per_oxy = "Proportion of positive urine test: Oxycontin",
+count_cod = "Number of positive urine test: Codeine",
+per_cod = "Proportion of positive urine test: Codeine",
+count_mor = "Number of positive urine test: Morphine",
+per_mor = "Proportion of positive urine test: Morphine",
+count_her = "Number of positive urine test: Heroin",
+per_her = "Proportion of positive urine test: Heroin",
+count_fen = "Number of positive urine test: Fentanyl",
+per_fen = "Proportion of positive urine test: Fentanyl",
+count_oop = "Number of positive urine test: Other opioids",
+per_oop = "Proportion of positive urine test: Other opioids",
+count_bup = "Number of positive urine test: Buprenorphine",
+per_bup = "Proportion of positive urine test: Buprenorphine",
+count_coc = "Number of positive urine test: Cocaine",
+per_coc = "Proportion of positive urine test: Cocaine",
+count_amp = "Number of positive urine test: Amphetamine",
+per_amp = "Proportion of positive urine test: Amphetamine",
+count_meth = "Number of positive urine test: Methamphetamine",
+per_meth = "Proportion of positive urine test: Methamphetamine",
+count_pcp = "Number of positive urine test: PCP",
+per_pcp = "Proportion of positive urine test: PCP",
+count_benz = "Number of positive urine test: Benzodiazepines",
+per_benz = "Proportion of positive urine test: Benzodiazepines",
+count_can = "Number of positive urine test: Cannabis",
+per_can = "Proportion of positive urine test: Cannabis",
+count_oh = "Number of positive urine test: Alcohol",
+per_oh = "Proportion of positive urine test: Alcohol"
+)
+
+#Summary with labels
+summary(table_1, labelTranslations = mylabels)
+
+# Export table 
+write2word(table_1, "Table_1.docx", 
+           title="Table 1",labelTranslations = mylabels, text=TRUE)
+
+# by site
+table_2 <- tableby(Pop ~ Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec +
+                         Employment_rec + Housing + Criminal + died + incar +  alcohol + cocaine +
+                         cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor +  
+                         count_total + count_type1 + prct_type1 + count_type2 + prct_type2 + 
+                         count_type3 + prct_type3 + count_type4 + prct_type4 + tot_time_months + Max_UrineNum + 
+                         count_op + 	per_op + 	count_oxy + 	per_oxy + 	count_cod + 	per_cod + 	
+                         count_mor + 	per_mor + 	count_her + 	per_her + 	count_fen + 	per_fen + 	
+                         count_oop + 	per_oop + 	count_bup + 	per_bup + 	count_coc + 	per_coc + 	
+                         count_amp + 	per_amp + 	count_meth + 	per_meth + 	count_pcp + 	per_pcp + 	
+                         count_benz + 	per_benz + 	count_can + 	per_can + 	count_oh + 	per_oh,
+                   data = df_seq_tree, numeric.stats=c("mean", "sd", "median", "q1q3", "min", "max", "Nmiss", "N"),
+                   digits=3, digits.p=3, digits.pct=1, strata = site, test=FALSE)
+
+summary(table_2, labelTranslations = mylabels, text=TRUE)
+
+# Recode NR
+df_seq_tree$Paying_rec[df_seq_tree$Paying_rec == "NR"] <- NA
+df_seq_tree$Marital[df_seq_tree$Marital == "NR"] <- NA
+
+df_seq_tree$Paying_rec <- droplevels(df_seq_tree$Paying_rec)
+df_seq_tree$Marital <- droplevels(df_seq_tree$Marital)
+
+table_1 <- tableby(Pop ~ site + Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec +
+                         Employment_rec + Housing + Criminal + died + incar +  alcohol + cocaine +
+                         cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor +  
+                         count_total + count_type1 + prct_type1 + count_type2 + prct_type2 + 
+                         count_type3 + prct_type3 + count_type4 + prct_type4 + tot_time_months + Max_UrineNum + 
+                         count_op + 	per_op + 	count_oxy + 	per_oxy + 	count_cod + 	per_cod + 	
+                         count_mor + 	per_mor + 	count_her + 	per_her + 	count_fen + 	per_fen + 	
+                         count_oop + 	per_oop + 	count_bup + 	per_bup + 	count_coc + 	per_coc + 	
+                         count_amp + 	per_amp + 	count_meth + 	per_meth + 	count_pcp + 	per_pcp + 	
+                         count_benz + 	per_benz + 	count_can + 	per_can + 	count_oh + 	per_oh,
+                   data = df_seq_tree, numeric.stats=c("mean", "sd", "q1q3", "median", "min", "max", "Nmiss", "N"),
+                   digits=3, digits.p=3, digits.pct=1)
+
+#Summary with labels
+summary(table_1, labelTranslations = mylabels, text=TRUE)
+```
+
+## Sequence analysis
+### Takehome
+```{r}
+df_seq_tree[c(8:187)] <- lapply(df_seq_tree[c(8:187)], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5"), 
+                                 labels = c("In-clinic",
+                                            "Holiday/Weekend",
+                                            "Take-home",
+                                            "No dose",
+                                            "Censored"))
+
+#Labels for sequences
+one.labels <- c("In-clinic",
+                "Holiday/Weekend",
+                "Take-home",
+                "No dose",
+                "Censored")
+
+#Abbreviations
+one.scode <-c('IC',
+              'HW',
+              'TH',
+              'NO',
+              'CE')
+
+one.alphabet <- c("In-clinic",
+                "Holiday/Weekend",
+                "Take-home",
+                "No dose",
+                "Censored")
+
+# Defining colors
+colors <- c("#8DEAF0", "#4685F0", "#F02286",
+            "#E6E6E6", "#FFFFFF")
+
+#Sequence object
+tk.seq <- seqdef(df_seq_tree,
+                 var = 8:187,
+                 left="DEL",
+                 states=one.scode,
+                 missing = NA,
+                 labels = one.labels,
+                 cpal=colors,
+                 alphabet = one.alphabet,
+                 xtstep=30,
+                 start=0)
+```
+
+#### Dissimilary matrix
+```{r}
+dist.dhd <- seqdist(tk.seq, method="LCS")
+```
+
+#### Multifactor analysis
+```{r}
+## Positive urine of opioids after intake
+tk.mfac = dissmfacw(dist.dhd ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec + Pop +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                    data = df_seq_tree, 
+                    R = 5000)
+
+tt = data.table(tk.mfac$mfac[order(-tk.mfac$mfac$PseudoR2), ])
+
+total = tt[Variable == "Total"]
+rest = tt[Variable != "Total"]
+
+name_vars = c("Gender", "age_groups", "race_eth", "Paying_rec", "Marital", "Education_rec", "Pop", "Employment_rec", 
+              "Housing", "Criminal", "alcohol", "cocaine", "cannabis", "meth", "benzo", "diff_opioid", "opioid_route", 
+              "sum_comor", "site")
+
+label_vars = c("Gender", "Age groups", "Race/Ethnicity", "Payment type", "Marital status", "Education", 
+               "Population", "Employment", "Housing situation", "Lifetime Criminal involvement", 
+               "Alcohol", "Cocaine", "Cannabis", "Methamphetamine", "Benzodiazepine", "Difference opioid initiation and current age", 
+               "Main route of administration: opioid", "Psychiatric comorbidity", "Site")
+
+dict_vars = hash(name_vars, label_vars)
+rest[, Variable := values(dict_vars, rest[["Variable"]])]
+tt = rbind(rest, total)
+setnames(tt,
+       names(tt),
+       c("Covariate", "Pseudo F", "Pseudo $R^2$", "p-value"))
+
+caption = paste0("Multi-factor discrepancy analysis for Methadone Dispensing")
+
+label = "tab:discrepancy_job"
+ptab = print(xtable(tt, caption = caption, label = label, align = "llccc"),
+             include.rownames = FALSE,
+             caption.placement = "top",
+             table.placement = "htp",
+             sanitize.text.function=function(x) {x})
+ptab
+```
+
+#### Regression tree - all covariates
+```{r}
+#table(df_seq_tree$Marital, useNA = "ifany")
+df_seq_tree$race_eth[df_seq_tree$race_eth == "NR"] <- NA
+df_seq_tree$Paying_rec[df_seq_tree$Paying_rec == "NR"] <- NA
+df_seq_tree$Marital[df_seq_tree$Marital == "NR"] <- NA
+df_seq_tree$Education_rec[df_seq_tree$Education_rec == "NR"] <- NA
+df_seq_tree$Employment_rec[df_seq_tree$Employment_rec == "NR"] <- NA
+df_seq_tree$Housing[df_seq_tree$Housing == "NR"] <- NA
+df_seq_tree$Criminal[df_seq_tree$Criminal == "NR"] <- NA
+
+df_seq_tree$Marital <- as.numeric(df_seq_tree$Marital)
+df_seq_tree <- df_seq_tree %>%
+  mutate_at(vars("Marital"),
+            function(x) car::recode(x, "1:2=1;3=2;4=1"))
+
+df_seq_tree[c("Marital")] <- lapply(df_seq_tree[c("Marital")], factor,
+                                 levels=c("1", 
+                                          "2"), 
+                                 labels = c("Not married",
+                                            "Married"))
+
+st_tk <- seqtree(tk.seq ~  Gender + age_groups + race_eth + Paying_rec + Marital + Education_rec + Pop +
+                                Employment_rec + Housing + Criminal + alcohol + cocaine +
+                                cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor + site,
+                 data = df_seq_tree, 
+                 R = 5000, 
+                 diss = dist.dhd,
+                 weight.permutation = "diss",
+                 max.depth = 10,
+                 pval = 0.05)
+
+seqtree2dot(st_tk, filename="mytree", type = "I", border = NA, cex.main = 2, sortv = "from.end")
+
+# Save the regression tree as a PNG image
+png("Output/Takehome/Reg_tree/st_tk.png", width = 11, height = 8.5)
+seqtreedisplay(st_tk, type = "I", border = NA, image.format = "png", gvpath = 'C:/Program Files/Graphviz',
+               cex.main = 2,
+         sortv = "from.end")
+dev.off()
+```
+
+#### Regression tree - only 0.05 covariates
+```{r}
+#names(df_seq_tree)
+st_tk <- seqtree(tk.seq ~  site + per_Alcohol + per_Opioid + per_Meth + per_Benzo + Paying_rec + per_Cocaine + 
+                           per_Cannabis + died + incar + Pop + meth,
+                 data = df_seq_tree, 
+                 R = 5000, 
+                 diss = dist.dhd,
+                 weight.permutation = "diss",
+                 max.depth = 10,
+                 pval = 0.05)
+
+png("Output/Takehome/Reg_tree/st_tk.png", width = 1500, height = 1000, units = "px")
+seqtreedisplay(st_tk, type = "d", border = NA,  image.format = "png", gvpath='C:/Program Files/Graphviz',
+               cex.main = 2,
+               filename = "Output/Takehome/Reg_tree/st_tk.png")
+dev.off()
+```
+
+
+
+## Dosage
+
+```{r}
+df_seq[c(188:367)] <- lapply(df_seq[c(188:367)], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5",
+                                          "6", 
+                                          "7",
+                                          "8",
+                                          "9",
+                                          "10",
+                                          "11", 
+                                          "12",
+                                          "13",
+                                          "14",
+                                          "15",
+                                          "16", 
+                                          "17",
+                                          "18",
+                                          "19",
+                                          "20",
+                                          "21",
+                                          "22"), 
+                                 labels = c("0 to 29",
+                                            "30 to 39",
+                                            "40 to 49",
+                                            "50 to 59",
+                                            "60 to 69",
+                                            "70 to 79",
+                                            "80 to 89",
+                                            "90 to 99",
+                                            "100 to 109",
+                                            "110 to 119",
+                                            "120 to 129",
+                                            "130 to 139",
+                                            "140 to 149",
+                                            "150 to 159",
+                                            "160 to 169",
+                                            "170 to 179",
+                                            "180 to 189",
+                                            "190 to 199",
+                                            "200 to 209",
+                                            "210 or more",
+                                            "No dose",
+                                            "Censored"))
+
+#Labels for sequences
+one.labels <- c("0 to 29",
+                "30 to 39",
+                "40 to 49",
+                "50 to 59",
+                "60 to 69",
+                "70 to 79",
+                "80 to 89",
+                "90 to 99",
+                "100 to 109",
+                "110 to 119",
+                "120 to 129",
+                "130 to 139",
+                "140 to 149",
+                "150 to 159",
+                "160 to 169",
+                "170 to 179",
+                "180 to 189",
+                "190 to 199",
+                "200 to 209",
+                "210 or more",
+                "No dose",
+                "Censored")
+
+one.alphabet <- c("0 to 29",   # Blue
+                  "30 to 39",  # Blue
+                  "40 to 49",  # Blue
+                  "50 to 59",  # Blue
+                  "60 to 69",  # Blue
+                  "70 to 79",  # Blue
+                  "80 to 89",  # Blue
+                  "90 to 99",  # Blue
+                  "100 to 109", # Magenta
+                  "110 to 119", # Magenta
+                  "120 to 129", # Magenta
+                  "130 to 139", # Magenta
+                  "140 to 149", # Magenta
+                  "150 to 159", # Magenta
+                  "160 to 169", # Orange
+                  "170 to 179", # Orange
+                  "180 to 189", # Orange
+                  "190 to 199", # Orange
+                  "200 to 209", # Orange
+                  "210 or more", # Orange
+                  "No dose", # Grey
+                  "Censored") # white
+
+# Defining colors
+colors <- c("#BCE4F9", "#8EBFF2", "#6199EC", "#3B74E6", "#1D4EE0", "#0A1FBE", "#080F73", "#060627",
+            "#FFB6C1", "#FF9DBB", "#FF84B5", "#FF6BAF", "#FF52A9", "#FF39A3",
+            "#FFE5B4", "#FFDAB9", "#FFA07A", "#FF8C00", "#FF7F50", "#FF6347",
+            "#E6E6E6", "#FFFFFF")
+
+
+#Sequence object
+dose.seq <- seqdef(df_seq, 
+                   var = 188:367, 
+                   left="DEL",
+                   missing = NA, 
+                   labels = one.labels, 
+                   cpal=colors,
+                  alphabet = one.alphabet,
+                  xtstep=7,
+                  start=0)
+
+seqlegend(dose.seq, fontsize = 1.5)
+
+day <-c(0:180)
+png("Output/Dosage/Descriptive/dose_0dist.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = "right", ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission")
+dev.off()
+```
+
+#### Descriptive
+
+```{r}
+png("Output/Dosage/Descriptive/dose_dist_1age.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$age_groups)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_2gender.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Gender)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_3race_eth.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$race_eth)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_4Ins.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Ins)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_5Paying_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Paying_rec)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_6Marital.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Marital)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_7Education_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Education_rec)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_8Housing.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Housing)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_9Employment_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Employment_rec)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_10Arrest.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Arrest)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_11Criminal.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Criminal)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_12alcohol.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$alcohol)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_13cocaine.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$cocaine)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_14cannabis.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$cannabis)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_15halluci.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$halluci)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_16PCP.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$PCP)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_17ampheta.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$ampheta)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_18meth.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$meth)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_19benzo.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$benzo)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_20other_use.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$other_use)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_21Tobacco.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Tobacco)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_22Anxiety.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Anxiety)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_23PTSD.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$PTSD)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_24Psychotic.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Psychotic)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_25Bipolar.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Bipolar)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_26Behavior.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Behavior)
+dev.off()
+
+png("Output/Dosage/Descriptive/dose_dist_27Site.png", width = 1500, height = 1000, units = "px")
+seqdplot(dose.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$site)
+dev.off()
+```
+
+#### Cluster analysis
+
+```{r}
+dist.one.om1 <- seqdist(dose.seq, method="DHD")
+
+one.om.ward <- hclust(as.dist(dist.one.om1),
+                       method="ward.D")
+
+one.ward <- as.clustrange(one.om.ward, 
+                           diss=dist.one.om1,
+                           ncluster=10)
+
+round(summary(one.ward,max.rank = 10), digits = 2)
+```
+
+#### Compare to null model
+
+```{r eval=FALSE}
+#null <- seqnullcqi(dose.seq, one.ward, R=1000, model=c("combined"), 
+# 				seqdist.args=list(method="DHD"),
+#				hclust.method="ward.D")
+
+#save(null, file="null_ssa_dose.Rda")
+load(file="null_ssa_dose.Rda")
+
+# ASW
+png("Output/Dosage/Cluster/Null model/dose_asw_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="ASW", type="line")
+dev.off()
+png("Output/Dosage/Cluster/Null model/dose_asw_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="ASW", type="density")
+dev.off()
+
+# HC
+png("Output/Dosage/Cluster/Null model/dose_hc_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="HC", type="line")
+dev.off()
+png("Output/Dosage/Cluster/Null model/dose_hc_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="HC", type="density")
+dev.off()
+
+# HG
+png("Output/Dosage/Cluster/Null model/dose_hg_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="HG", type="line")
+dev.off()
+png("Output/Dosage/Cluster/Null model/dose_hg_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="HG", type="density")
+dev.off()
+
+# PBC
+png("Output/Dosage/Cluster/Null model/dose_pbc_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="PBC", type="line")
+dev.off()
+png("Output/Dosage/Cluster/Null model/dose_pbc_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="PBC", type="density")
+dev.off()
+
+```
+
+#### Extracting cluster variable: 3
+
+```{r eval=FALSE}
+df_seq$dose_clus3 <- one.ward$clustering$cluster3
+df_seq$dose_clus3 <- as.numeric(df_seq$dose_clus3)
+a <- table(df_seq$dose_clus3)
+round(prop.table(a)*100, 1)
+
+df_seq[c("dose_clus3")] <- lapply(df_seq[c("dose_clus3")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3"), 
+                                   labels = c("Discontinuation (39.1%)",
+                                              "Low Dosage (20.2%)",
+                                              "High dose (40.7%)"))
+
+
+#Plots
+png("Output/Dosage/Cluster/3 cluster/dose_3clus_1dist.png", width = 1000, height = 1500, units = "px")
+seqdplot(dose.seq, group = df_seq$dose_clus3, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 3, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+
+png("Output/Dosage/Cluster/3 cluster/dose_3clus_2freq.png", width = 1000, height = 1500, units = "px")
+seqIplot(dose.seq, group = df_seq$dose_clus3, with.legend = F, ylab="Frequency", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 3, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+
+png("Output/Dosage/Cluster/3 cluster/dose_3clus_3mod.png", width = 1000, height = 1500, units = "px")
+seqmsplot(dose.seq, group = df_seq$dose_clus3, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 3, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+
+```
+
+#### Extracting cluster variable: 6
+
+```{r eval=FALSE}
+df_seq$dose_clus6 <- one.ward$clustering$cluster6
+df_seq$dose_clus6 <- as.numeric(df_seq$dose_clus6)
+a <- table(df_seq$dose_clus6)
+round(prop.table(a)*100, 1)
+
+df_seq <- df_seq %>%
+  mutate_at(vars("dose_clus6"),
+            function(x) car::recode(x, "2=1;1=2;3=3;4=4;5=5;6=6")) 
+
+df_seq[c("dose_clus6")] <- lapply(df_seq[c("dose_clus6")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5",
+                                          "6"), 
+                                   labels = c("Early discontinuation (18.2%)",
+                                              "Late discontinuation (20.9%)",
+                                              "Continous with low dose (<70) with gaps (20.2%)",
+                                              "Continous with mid dose (>70 and <90) (11.5%)",
+                                              "Continous with mid-high dose (>90 and <120) (14.0%)",
+                                              "Continous with high dose (>120) (15.2%)"))
+
+
+#Plots
+png("Output/Dosage/Cluster/6 cluster/dose_3clus_1dist.png", width = 1000, height = 1500, units = "px")
+seqdplot(dose.seq, group = df_seq$dose_clus6, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 6, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8,
+         with.legend = "right")
+dev.off()
+
+png("Output/Dosage/Cluster/6 cluster/dose_3clus_2freq.png", width = 1000, height = 1500, units = "px")
+seqIplot(dose.seq, group = df_seq$dose_clus6, ylab="Frequency", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 6, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8,
+         with.legend = "right")
+dev.off()
+
+png("Output/Dosage/Cluster/6 cluster/dose_3clus_3mod.png", width = 1000, height = 1500, units = "px")
+seqmsplot(dose.seq, group = df_seq$dose_clus6, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 6, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8,
+         with.legend = "right")
+dev.off()
+
+```
+
+### Regression tree
+
+```{r}
+str(df_seq)
+df_seq$site <- as.factor(df_seq$site)
+st_dose <- seqtree(dose.seq ~ site + age_groups + Gender + race_eth + Paying_rec + Marital + 
+                          Education_rec + Housing + Employment_rec + Arrest + Criminal + alcohol + 
+                          cocaine + cannabis + meth + benzo + Anxiety + PTSD + Psychotic + Bipolar + Behavior,
+                              data = df_seq, R = 10000, diss = dist.one.om1,
+                              weight.permutation = "diss",
+                              min.size = 15,
+                              max.depth = 10)
+
+png("Output/Dosage/Reg_tree/st_dose.png", width = 1500, height = 1000, units = "px")
+seqtreedisplay(st_dose, type = "d", border = NA,  image.format = "png", gvpath='C:/Program Files/Graphviz',
+               cex.main = 2,
+               filename = "Output/Dosage/Reg_tree/st_dose.png")
+dev.off()
+
+```
+
+
+
+
+# Past work
+
+
+#### Descriptive
+```{r eval=FALSE}
+png("Output/Takehome/Descriptive/tk_dist_1age.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$age_groups)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_2gender.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Gender)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_3race_eth.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$race_eth)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_4Ins.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Ins)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_5Paying_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Paying_rec)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_6Marital.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Marital)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_7Education_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Education_rec)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_8Housing.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Housing)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_9Employment_rec.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Employment_rec)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_10Arrest.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Arrest)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_11Criminal.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Criminal)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_12alcohol.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$alcohol)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_13cocaine.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$cocaine)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_14cannabis.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$cannabis)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_15halluci.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$halluci)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_16PCP.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$PCP)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_17ampheta.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$ampheta)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_18meth.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$meth)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_19benzo.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$benzo)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_20other_use.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$other_use)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_21Tobacco.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Tobacco)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_22Anxiety.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Anxiety)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_23PTSD.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$PTSD)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_24Psychotic.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Psychotic)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_25Bipolar.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Bipolar)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_26Behavior.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$Behavior)
+dev.off()
+
+png("Output/Takehome/Descriptive/tk_dist_27Site.png", width = 1500, height = 1000, units = "px")
+seqdplot(tk.seq, with.legend = F, ylab="Proportion", xtlab=day, main = "State distribution plot", border = NA, xlab="Days since first admission",
+         group = df_seq$site)
+dev.off()
+```
+
+#### Cluster analysis
+```{r}
+dist.one.om1 <- seqdist(tk.seq, method="DHD")
+
+one.om.ward <- hclust(as.dist(dist.one.om1),
+                       method="ward.D")
+
+one.ward <- as.clustrange(one.om.ward, 
+                           diss=dist.one.om1,
+                           ncluster=10)
+round(summary(one.ward,max.rank = 10), digits = 2)
+```
+
+#### Compare to null model
+```{r eval=FALSE}
+#null <- seqnullcqi(tk.seq, one.ward, R=1000, model=c("combined"), 
+# 				seqdist.args=list(method="DHD"),
+#				hclust.method="ward.D")
+#
+#save(null, file="null_ssa_tk.Rda")
+#
+load(file="null_ssa_tk.Rda")
+
+# ASW
+png("Output/Takehome/Cluster/Null model/tk_asw_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="ASW", type="line")
+dev.off()
+png("Output/Takehome/Cluster/Null model/tk_asw_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="ASW", type="density")
+dev.off()
+
+# HC
+png("Output/Takehome/Cluster/Null model/tk_hc_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="HC", type="line")
+dev.off()
+png("Output/Takehome/Cluster/Null model/tk_hc_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="HC", type="density")
+dev.off()
+
+# HG
+png("Output/Takehome/Cluster/Null model/tk_hg_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="HG", type="line")
+dev.off()
+png("Output/Takehome/Cluster/Null model/tk_hg_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="HG", type="density")
+dev.off()
+
+# PBC
+png("Output/Takehome/Cluster/Null model/tk_pbc_line.png", width = 600, height = 350, units = "px")
+plot(null, stat="PBC", type="line")
+dev.off()
+png("Output/Takehome/Cluster/Null model/tk_pbc_density.png", width = 600, height = 350, units = "px")
+plot(null, stat="PBC", type="density")
+dev.off()
+
+# All
+png("Output/Takehome/Cluster/Null model/tk_all.png", width = 600, height = 350, units = "px")
+plot(null, stat="all", type="line")
+dev.off()
+```
+
+#### Extracting cluster variable 1a: 5
+```{r}
+df_seq_1a$tkhome_clus5 <- one.ward$clustering$cluster5
+df_seq_1a$tkhome_clus5 <- as.numeric(df_seq_1a$tkhome_clus5)
+a <- table(df_seq_1a$tkhome_clus5)
+prop.table(a)*100
+
+df_seq_1a <- df_seq_1a %>%
+  mutate_at(vars("tkhome_clus5"),
+            function(x) car::recode(x, "3=1;2=2;1=3;4=4;5=5")) 
+
+df_seq_1a[c("tkhome_clus5")] <- lapply(df_seq_1a[c("tkhome_clus5")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5"), 
+                                   labels = c("Early discontinuation",
+                                              "Mid discontinuation",
+                                              "Late discontinuation",
+                                              "Continous in clinic",
+                                              "Take-home"))
+```
+
+##### Plots
+```{r eval=F}
+png("Output/Takehome/Cluster/5 cluster/tk_5clus_1dist.png", width = 700, height = 1500, units = "px")
+seqdplot(tk.seq, group = df_seq$tkhome_clus5, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 1,
+         cex.axis=1.5 , cex.main = 2)
+dev.off()
+
+png("Output/Takehome/Cluster/5 cluster/tk_5clus_2freq.png", width = 700, height = 1500, units = "px")
+seqIplot(tk.seq, group = df_seq$tkhome_clus5, with.legend = F, ylab="Frequency", xtlab=day, main = "", border = NA,
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8,
+         sortv = "from.start")
+dev.off()
+
+png("Output/Takehome/Cluster/5 cluster/tk_5clus_3mod.png", width = 700, height = 1500, units = "px")
+seqmsplot(tk.seq, group = df_seq$tkhome_clus5, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 1,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+```
+
+
+##### Multinomial regression
+```{r}
+df_models <- select(df_seq, Gender, age_groups, race_eth, Paying_rec, Marital, Education_rec, 
+                    Employment_rec, Housing, Criminal, alcohol, cocaine, 
+                    cannabis, meth, benzo, diff_opioid, opioid_route, sum_comor,
+                    tkhome_clus5,
+                    ptid)
+
+# Recoding some variables
+df_models$Paying_rec <- as.numeric(df_models$Paying_rec)
+df_models <- df_models %>%
+  mutate_at(vars("Paying_rec"),
+            function(x) car::recode(x, "1=1;2=2;3:4=3;5=9")) 
+
+
+df_models[c("Paying_rec")] <- lapply(df_models[c("Paying_rec")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "9"), 
+                                 labels = c("None (self-pay)",
+                                            "Public",
+                                            "Other",
+                                            "NR"))
+
+df_models$opioid_route <- as.numeric(df_models$opioid_route)
+df_models <- df_models %>%
+  mutate_at(vars("opioid_route"),
+            function(x) car::recode(x, "1:3=0;4=1;5=9")) 
+
+
+df_models[c("opioid_route")] <- lapply(df_models[c("opioid_route")], factor,
+                                 levels=c("0", 
+                                          "1",
+                                          "9"), 
+                                 labels = c("No",
+                                            "Yes",
+                                            "NR"))
+
+# Recode NR
+df_models$race_eth[df_models$race_eth == "NR"] <- NA
+df_models$Paying_rec[df_models$Paying_rec == "NR"] <- NA
+df_models$Marital[df_models$Marital == "NR"] <- NA
+df_models$Education_rec[df_models$Education_rec == "NR"] <- NA
+df_models$Employment_rec[df_models$Employment_rec == "NR"] <- NA
+df_models$Housing[df_models$Housing == "NR"] <- NA
+df_models$Criminal[df_models$Criminal == "NR"] <- NA
+df_models$opioid_route[df_models$opioid_route == "NR"] <- NA
+df_models$sum_comor[df_models$sum_comor == "NR"] <- NA
+
+df_models$race_eth <- droplevels(df_models$race_eth)
+df_models$Paying_rec <- droplevels(df_models$Paying_rec)
+df_models$Marital <- droplevels(df_models$Marital)
+df_models$Education_rec <- droplevels(df_models$Education_rec)
+df_models$Employment_rec <- droplevels(df_models$Employment_rec)
+df_models$Housing <- droplevels(df_models$Housing)
+df_models$Criminal <- droplevels(df_models$Criminal)
+df_models$opioid_route <- droplevels(df_models$opioid_route)
+df_models$sum_comor <- droplevels(df_models$sum_comor)
+
+library(jmv)
+library(nnet)
+library(VGAM)
+library(MASS)
+library(gtsummary)
+library(magrittr)
+
+multinom_pivot_wider <- function(x) {
+  # check inputs match expectatations
+  if (!inherits(x, "tbl_regression") || !inherits(x$model_obj, "multinom")) {
+    stop("`x=` must be class 'tbl_regression' summary of a `nnet::multinom()` model.")
+  }
+  
+  # create tibble of results
+  df <- tibble::tibble(outcome_level = unique(x$table_body$groupname_col))
+  df$tbl <- 
+    purrr::map(
+      df$outcome_level,
+      function(lvl) {
+        gtsummary::modify_table_body(
+          x, 
+          ~dplyr::filter(.x, .data$groupname_col %in% lvl) %>%
+            dplyr::ungroup() %>%
+            dplyr::select(-.data$groupname_col)
+        )
+      }
+    )
+  
+  tbl_merge(df$tbl, tab_spanner = paste0("**", df$outcome_level, "**"))
+}
+
+install.packages("writexl")
+library(writexl)
+
+# Fit the multinomial regression model
+model1 <- vglm(tkhome_clus5 ~ Gender + age_groups + race_eth + Paying_rec + Marital + 
+                                     Education_rec + Employment_rec + Housing + Criminal + alcohol + 
+                                     cocaine + cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor,   
+                 data = df_models, family = multinomial)
+
+# Check whether the model converged
+summary(model1)
+
+# Specify a different reference level
+df_models$tkhome_clus5 <- relevel(df_models$tkhome_clus5, ref = "Early discontinuation")
+
+# Fit the model again with the new reference level
+model1 <- vglm(tkhome_clus5 ~ Gender + age_groups + race_eth + Paying_rec + Marital + 
+                                     Education_rec + Employment_rec + Housing + Criminal + alcohol + 
+                                     cocaine + cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor,   
+                 data = df_models, family = multinomial)
+
+# Extract the coefficient table for the reference level
+coef_table <- coef(model1)[[1]]
+coef_table <- as.data.frame(coef_table)
+# Extract the model coefficients
+coef_values <- coef_table[, 1]
+
+
+
+# multinom model tabulated with gtsummary
+set.seed(2002)
+model1 <- vglm(relevel(tkhome_clus5, ref = "Early discontinuation") ~ Gender + age_groups + race_eth + Paying_rec + Marital + 
+                                     Education_rec + Employment_rec + Housing + Criminal + alcohol + 
+                                     cocaine + cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor,   
+                 data = df_models, family = multinomial) 
+
+summary(model1)
+
+exp(coef(model1, matrix = TRUE))
+
+# Combine the coefficient values, confidence intervals, and p-values into a table
+coef_table <- cbind(coef_values, coef_CI, p_values)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "Output/Takehome/Multinom/m_clus5.rtf")
+
+
+m10a <- vglm(relevel(tkhome_clus5, ref = "Early discontinuation") ~ sum_comor, data=df_models, family = multinomial) 
+
+
+m_clus <- nnet::multinom(tkhome_clus5 ~ Gender + age_groups + race_eth + Paying_rec + Marital + 
+                                     Education_rec + Employment_rec + Housing + Criminal + alcohol + 
+                                     cocaine + cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor,   
+                 data = df_models)
+
+summary(m_clus)
+nrow(residuals(m_clus))
+library(lmtest)
+lrtest(m_clus)
+```
+
+###### MICE
+```{r}
+library(mice)
+library(miceadds)
+## Multiple imputation by chain equations - https://data.library.virginia.edu/getting-started-with-multiple-imputation-in-r/
+# Explore missing data patterns
+p_missing <- unlist(lapply(df_models, function(x) sum(is.na(x))))/nrow(df_models)
+sort(p_missing[p_missing > 0], decreasing = TRUE)
+
+# We run the mice code with 0 iterations 
+imp <- mice(df_models, maxit=0)
+
+# Extract predictorMatrix and methods of imputation 
+predM <- imp$predictorMatrix
+meth <- imp$method
+
+names(df_models)
+# Setting values of variables I'd like to leave out to 0 in the predictor matrix
+predM[, c("ptid")] <- 0
+
+# If you like, view the first few rows of the predictor matrix
+head(predM)
+
+# Specify a separate imputation model for variables of interest 
+# Numerical variables
+num <- c("diff_opioid")
+
+# Ordered categorical variables 
+poly <- c("Education_rec", "age_groups")
+
+# Dichotomous variable
+log <- c("Criminal", "opioid_route", "Gender", "alcohol", "cocaine", "cannabis", "meth", "benzo", "sum_comor")
+
+# Unordered categorical variable 
+poly2 <- c("race_eth","Marital","Employment_rec","Housing","Paying_rec", "tkhome_clus5")
+
+# Turn their methods matrix into the specified imputation models
+meth[num] <- "norm.boot"
+meth[log] <- "logreg.boot"
+meth[poly] <- "polyreg"
+meth[poly2] <- "polyreg"
+
+meth
+
+# With this command, we tell mice to impute the df data, create 30
+# datasets, use predM as the predictor matrix and don't print the imputation
+# process. If you would like to see the process, set print as TRUE
+
+imp2 <- mice(df_models, maxit = 30, 
+             predictorMatrix = predM, 
+             method = meth, print =  FALSE)
+
+set.seed(2002)
+
+table(df_models$sum_comor)
+
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Gender + age_groups + race_eth + Paying_rec + Marital + 
+                                     Education_rec + Employment_rec + Housing + Criminal + alcohol + 
+                                     cocaine + cannabis + meth + benzo + diff_opioid + opioid_route + sum_comor,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "Output/Takehome/Multinom/m_clus5_mice.rtf")
+```
+
+###### Bivariate models
+```{r}
+# Unadjusted models - tkhome_clus5
+# Gender
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Gender ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice1.rtf")
+
+# Age
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ age_groups ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice2.rtf")
+
+# Race/ethnicity
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ race_eth ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice3.rtf")
+
+# Paying
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Paying_rec ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice4.rtf")
+
+
+# Marital status
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Marital ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice5.rtf")
+
+# Education
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Education_rec ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice6.rtf")
+
+
+# Employment
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Employment_rec ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice7.rtf")
+
+# Housing
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Housing ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice8.rtf")
+
+
+# Criminal
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ Criminal ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice9.rtf")
+
+# Alcohol
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ alcohol ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice10.rtf")
+
+
+# cocaine
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ cocaine ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice11.rtf")
+
+# cannabis
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ cannabis ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice12.rtf")
+
+# meth
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ meth ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice13.rtf")
+
+# benzo
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ benzo ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice14.rtf")
+
+# diff_opioid
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ diff_opioid ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice15.rtf")
+
+# opioid_route
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ opioid_route ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice16.rtf")
+
+
+# sum_comor
+names(df_models)
+set.seed(2002)
+tbl <- with(imp2,
+            nnet::multinom(tkhome_clus5 ~ sum_comor ,  
+                 data = df_models)) %>%
+  tbl_regression(exponentiate = TRUE, label = mylabels)
+
+tbl %>%
+  gtsummary::as_gt() %>% 
+  gt::gtsave(., "C:/Users/ASUS/CJS UC Dropbox/Ignacio Bórquez/PhD/NYU/Rotations/Rotation 2/OPTIMMAL/Data/Output/Takehome/Multinom/m_clus5_mice17.rtf")
+
+tbl
+
+m10 <- multinom(tkhome_clus5 ~ sum_comor,  
+                 data = df_models)
+library(VGAM)
+install.packages("mlogit")
+library(mlogit)
+
+sum(duplicated(df_models))
+
+m10a <- vglm(relevel(tkhome_clus5, ref = "Early discontinuation") ~ sum_comor, data=df_models, family = multinomial) 
+m10b <- multinom(tkhome_clus5 ~ sum_comor, data = df_models)
+
+m10c <- mlogit::mlogit(tkhome_clus5 ~ sum_comor, data = df_models)
+
+exp(coef(m10a, matrix = TRUE))
+exp(coef(m10b, matrix = TRUE))
+
+```
+
+
+
+#### Extracting cluster variable: 10
+
+```{r eval=F}
+df_seq$tkhome_clus10 <- one.ward$clustering$cluster10
+df_seq$tkhome_clus10 <- as.numeric(df_seq$tkhome_clus10)
+a <- table(df_seq$tkhome_clus10)
+prop.table(a)*100
+
+df_seq <- df_seq %>%
+  mutate_at(vars("tkhome_clus10"),
+            function(x) car::recode(x, "3=1;4=2;2=3;1=4;10=5;5=6;8=7;6=8;9=9;7=10")) 
+
+df_seq[c("tkhome_clus10")] <- lapply(df_seq[c("tkhome_clus10")], factor,
+                                 levels=c("1", 
+                                          "2",
+                                          "3",
+                                          "4",
+                                          "5",
+                                          "6", 
+                                          "7",
+                                          "8",
+                                          "9",
+                                          "10"), 
+                                   labels = c("Early discontinuation (11.7%)",
+                                              "Early-Mid discontinuation (9.0%)",
+                                              "Mid discontinuation (9.9%)",
+                                              "Late discontinuation (9.9%)",
+                                              "Irregular (4.1%)",
+                                              "Continous in clinic (29.9%)",
+                                              "In clinic increasing take-home (9.9%)",
+                                              "Weekend takehome (3.7%)",
+                                              "Intermitent takehome (3.9%)",
+                                              "Take-home (8.0%)"))
+
+
+#Plots
+png("Output/Takehome/Cluster/10 cluster/tk_10clus_1dist.png", width = 1000, height = 1500, units = "px")
+seqdplot(tk.seq, group = df_seq$tkhome_clus10, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 2,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+
+png("Output/Takehome/Cluster/10 cluster/tk_10clus_2freq.png", width = 1000, height = 1500, units = "px")
+seqIplot(tk.seq, group = df_seq$tkhome_clus10, with.legend = F, ylab="Frequency", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 2,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+
+png("Output/Takehome/Cluster/10 cluster/tk_10clus_3mod.png", width = 1000, height = 1500, units = "px")
+seqmsplot(tk.seq, group = df_seq$tkhome_clus10, with.legend = F, ylab="Proportion", xtlab=day, main = "", border = NA, 
+         xlab="Days since first admission",
+         use.layout=TRUE, rows = 5, cols = 2,
+         cex.axis=1.3 , cex.main = 1.8)
+dev.off()
+```
+
