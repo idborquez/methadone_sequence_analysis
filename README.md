@@ -1,2 +1,2 @@
-# What Influences Methadone Dispensing? Analyzing Daily Trajectories  of Methadone Dispensing among Patients Admitted to U.S. Opioid Treatment Programs (OTPs) Before and After Covid-19 Using State Sequence Analysis
+# What influences methadone dispensing? Analyzing trajectories of daily methadone dispensing among people admitted to U.S. Opioid Treatment Programs (OTPs) before and after COVID-19 using State Sequence Analysis (SSA)
 Code available for manuscript
